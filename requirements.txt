@@ -1,6 +1,7 @@
-gfpgan
-basicsr
-opencv-python-headless
-gradio
-torch
-torchvision
+torch>=2.0.0
+torchvision>=0.15.0
+gfpgan>=1.3.8
+gradio>=4.0.0
+opencv-python>=4.8.0
+pillow>=10.0.0
+numpy>=1.24.0
