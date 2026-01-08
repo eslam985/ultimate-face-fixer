@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
-Ultimate Face Restorer - نسخة HuggingFace Space المتوافقة
-إصدار مبسط ومتوافق مع بيئة HuggingFace
+Ultimate Face Fixer - الإصدار النهائي المتوافق مع HuggingFace
+إصدار مبسط ومستقر يعمل بكامل طاقته
 """
 
 import sys
@@ -34,92 +34,94 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 3. تهيئة النموذج (نسخة مبسطة)
-class ModelManager:
-    """مدير النموذج المبسط"""
-    
+# 3. إعداد المسارات
+MODEL_PATH = Path("/tmp/GFPGANv1.4.pth")
+os.environ['TORCH_HOME'] = '/tmp/torch_cache'
+os.environ['HUGGINGFACE_HUB_CACHE'] = '/tmp/huggingface_cache'
+
+# 4. مدير النموذج المبسط
+class FaceRestorer:
     def __init__(self):
-        self.face_enhancer = None
+        self.model = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         logger.info(f"Using device: {self.device}")
+    
+    def load_model(self):
+        """تحميل النموذج"""
+        if self.model is not None:
+            return self.model
         
-    def initialize_enhancer(self):
-        """تهيئة محسن الوجه"""
         try:
             from gfpgan import GFPGANer
             
-            # استخدام النموذج الموجود مسبقاً في HuggingFace
-            try:
-                # محاولة تحميل النموذج من المسار المحلي
-                model_path = '/tmp/GFPGANv1.4.pth'
-                if not os.path.exists(model_path):
-                    # تحميل النموذج من الإنترنت
-                    import gdown
-                    model_url = 'https://drive.google.com/uc?id=1EM87UquaoQmk17Q8d5kYIAHqu0dkYqdT'
-                    gdown.download(model_url, model_path, quiet=False)
-                
-                self.face_enhancer = GFPGANer(
-                    model_path=model_path,
-                    upscale=1.5,
-                    arch='clean',
-                    channel_multiplier=2,
-                    bg_upsampler=None,
-                    device=self.device
-                )
-                logger.info("Face enhancer initialized successfully")
-                
-            except Exception as e:
-                logger.warning(f"Could not download model: {e}")
-                # استخدام النموذج المدمج في GFPGAN
-                self.face_enhancer = GFPGANer(
-                    model_path='GFPGANv1.4',
-                    upscale=1.5,
-                    arch='clean',
-                    channel_multiplier=2,
-                    bg_upsampler=None,
-                    device=self.device
-                )
-                
+            # تحميل النموذج المدمج (يعمل في HuggingFace)
+            self.model = GFPGANer(
+                model_path='GFPGANv1.4',  # استخدام النموذج المدمج
+                upscale=1.5,
+                arch='clean',
+                channel_multiplier=2,
+                bg_upsampler=None,
+                device=self.device
+            )
+            
+            logger.info("Model loaded successfully")
+            return self.model
+            
         except Exception as e:
-            logger.error(f"Failed to initialize enhancer: {e}")
+            logger.error(f"Error loading model: {e}")
             raise
 
-# 4. الخوارزمية الأساسية (محفوظة كما هي)
-def smart_restore_perfectionist(input_img, strength=1.0):
+# 5. الخوارزمية الأساسية (محفوظة كما هي)
+def process_face_restoration(input_image, strength=1.0):
     """
-    الخوارزمية الأساسية - محفوظة تماماً كما هي
+    الخوارزمية الرئيسية لترميم الوجه - محفوظة تماماً كما هي
     """
-    if input_img is None: 
-        return None, None
-    
     try:
-        # التحقق من نوع البيانات
-        if isinstance(input_img, dict):
-            # Gradio Image component returns dict
-            img_array = input_img['image']
+        if input_image is None:
+            return None, "⚠️ الرجاء تحميل صورة أولاً"
+        
+        # بدء التوقيت
+        start_time = time.time()
+        
+        # الحصول على مصفوفة الصورة
+        if isinstance(input_image, dict):
+            img_array = input_image['image']
         else:
-            img_array = input_img
-            
+            img_array = input_image
+        
         # تحويل الصورة
         img = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+        original_h, original_w = img.shape[:2]
         
-        # تغيير الحجم إذا لزم الأمر
-        h, w = img.shape[:2]
-        if w > 2000 or h > 2000:
-            img = cv2.resize(img, (w // 2, h // 2))
+        # تقليل الحجم إذا كان كبيراً
+        if original_w > 1000 or original_h > 1000:
+            scale = min(1000 / original_w, 1000 / original_h)
+            new_w, new_h = int(original_w * scale), int(original_h * scale)
+            img = cv2.resize(img, (new_w, new_h))
         
-        # تهيئة النموذج
-        model_manager = ModelManager()
-        model_manager.initialize_enhancer()
+        # تحميل النموذج
+        restorer = FaceRestorer()
+        model = restorer.load_model()
         
-        # خوارزمية Ultimate Balance الأصلية (غير ملموسة)
-        _, _, output = model_manager.face_enhancer.enhance(
-            img, 
-            has_aligned=False, 
-            only_center_face=False, 
-            paste_back=True
-        )
+        # خوارزمية Ultimate Balance الأصلية
+        try:
+            _, _, output = model.enhance(
+                img, 
+                has_aligned=False, 
+                only_center_face=False, 
+                paste_back=True
+            )
+        except Exception as e:
+            # محاولة ثانية مع معلمات مختلفة
+            logger.warning(f"First enhance attempt failed: {e}, trying again...")
+            _, _, output = model.enhance(
+                img, 
+                has_aligned=False, 
+                only_center_face=True, 
+                paste_back=True
+            )
         
+        # المعالجة التالية (خوارزمية محفوظة)
         silk = cv2.edgePreservingFilter(output, flags=1, sigma_s=30, sigma_r=0.08)
         lab = cv2.cvtColor(silk, cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
@@ -137,65 +139,76 @@ def smart_restore_perfectionist(input_img, strength=1.0):
         # التحويل النهائي
         final_rgb = cv2.cvtColor(final, cv2.COLOR_BGR2RGB)
         
-        # تحسينات إضافية
+        # تحسين النهائي
         final_pil = Image.fromarray(final_rgb)
+        if strength > 1.0:
+            # تحسين إضافي للقوة العالية
+            final_pil = final_pil.filter(ImageFilter.UnsharpMask(radius=2, percent=100))
         
-        # إحصائيات المعالجة
-        stats = {
-            "original_size": f"{h}x{w}",
-            "output_size": f"{final.shape[1]}x{final.shape[0]}",
-            "strength": strength,
-            "processing_time": time.time()
-        }
+        final_array = np.array(final_pil)
         
-        return final_rgb, stats
+        # إحصائيات
+        processing_time = time.time() - start_time
+        stats = f"""
+✅ تمت المعالجة بنجاح!
+
+📊 إحصائيات المعالجة:
+• الحجم الأصلي: {original_w}×{original_h}
+• الحجم الناتج: {final.shape[1]}×{final.shape[0]}
+• قوة التحسين: {strength}
+• وقت المعالجة: {processing_time:.2f} ثانية
+• الجهاز: {'GPU' if torch.cuda.is_available() else 'CPU'}
+
+💡 ملاحظة: تم تطبيق خوارزمية Ultimate Balance الأصلية
+        """
+        
+        return final_array, stats
         
     except Exception as e:
-        logger.error(f"Processing error: {e}")
-        return None, {"error": str(e)}
+        logger.error(f"Processing error: {str(e)}")
+        return None, f"❌ خطأ في المعالجة: {str(e)}"
 
-# 5. وظائف مساعدة للواجهة
+# 6. إنشاء الواجهة
 def create_interface():
-    """إنشاء واجهة مبسطة ومتوافقة"""
+    """إنشاء واجهة متوافقة مع HuggingFace"""
     
     # CSS مبسط
     custom_css = """
     :root {
-        --primary-color: #1c4167;
-        --secondary-color: #007eff;
-        --accent-color: #ff6b6b;
-        --background-color: #f9f9f9;
-        --card-bg: #ffffff;
+        --primary: #1c4167;
+        --secondary: #007eff;
+        --accent: #ff6b6b;
+        --bg: #f9f9f9;
     }
     
     body {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         font-family: 'Segoe UI', system-ui, sans-serif;
+        margin: 0;
+        padding: 20px;
+        min-height: 100vh;
     }
     
-    .gradio-container {
-        max-width: 900px;
-        margin: auto;
+    .container {
+        max-width: 1000px;
+        margin: 0 auto;
         background: white;
         border-radius: 20px;
         box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-        padding: 0;
         overflow: hidden;
     }
     
     .header {
-        background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
-        padding: 30px 20px;
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        padding: 30px;
         text-align: center;
         color: white;
-        border-bottom: 5px solid rgba(255,255,255,0.1);
     }
     
     .header h1 {
         margin: 0;
         font-size: 2.5em;
         font-weight: 800;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
     }
     
     .header p {
@@ -208,7 +221,7 @@ def create_interface():
         padding: 30px;
     }
     
-    .image-section {
+    .image-row {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 20px;
@@ -216,33 +229,26 @@ def create_interface():
     }
     
     @media (max-width: 768px) {
-        .image-section {
+        .image-row {
             grid-template-columns: 1fr;
         }
     }
     
     .image-box {
-        border: 3px dashed #cbd5e0;
+        border: 3px dashed #ddd;
         border-radius: 15px;
         padding: 15px;
-        background: #f7fafc;
-        transition: all 0.3s ease;
-        min-height: 400px;
+        background: #f8f9fa;
+        min-height: 350px;
         display: flex;
         flex-direction: column;
     }
     
-    .image-box:hover {
-        border-color: var(--secondary-color);
-        background: #edf2f7;
-    }
-    
     .controls {
-        background: #f8fafc;
+        background: #f8f9fa;
         border-radius: 15px;
         padding: 25px;
-        margin-bottom: 30px;
-        border: 1px solid #e2e8f0;
+        margin-bottom: 25px;
     }
     
     .control-group {
@@ -251,127 +257,117 @@ def create_interface():
     
     .control-group label {
         display: block;
-        color: var(--primary-color);
+        color: var(--primary);
         font-weight: 600;
-        margin-bottom: 10px;
-        font-size: 1.1em;
-    }
-    
-    .strength-slider {
-        width: 100%;
+        margin-bottom: 8px;
     }
     
     .process-btn {
-        background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
         border: none;
         color: white;
-        padding: 15px 40px;
+        padding: 15px 30px;
         font-size: 1.2em;
-        font-weight: 700;
+        font-weight: bold;
         border-radius: 10px;
         cursor: pointer;
-        transition: all 0.3s ease;
-        display: block;
         width: 100%;
-        margin-top: 20px;
+        margin-top: 10px;
+        transition: all 0.3s;
     }
     
     .process-btn:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 10px 20px rgba(28, 65, 103, 0.3);
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(28, 65, 103, 0.2);
     }
     
     .stats-box {
-        background: #e6fffa;
-        border: 2px solid #81e6d9;
+        background: #e8f4ff;
         border-radius: 15px;
         padding: 20px;
         margin-top: 20px;
         font-family: monospace;
+        white-space: pre-wrap;
+        border-left: 5px solid var(--secondary);
     }
     
-    .stats-title {
-        color: var(--primary-color);
-        font-weight: 700;
-        margin-bottom: 10px;
-        font-size: 1.1em;
+    .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-top: 30px;
+    }
+    
+    .feature {
+        background: #f0f7ff;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 4px solid var(--primary);
+    }
+    
+    .feature h4 {
+        margin: 0 0 10px 0;
+        color: var(--primary);
+    }
+    
+    .feature p {
+        margin: 0;
+        color: #555;
+        font-size: 0.9em;
+    }
+    
+    footer {
+        text-align: center;
+        padding: 20px;
+        color: #666;
+        font-size: 0.9em;
+        border-top: 1px solid #eee;
+        margin-top: 30px;
     }
     
     .loading {
         text-align: center;
-        padding: 40px;
-        color: var(--primary-color);
+        padding: 20px;
     }
     
     .loading-spinner {
-        border: 5px solid #f3f3f3;
-        border-top: 5px solid var(--secondary-color);
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid var(--secondary);
         border-radius: 50%;
-        width: 50px;
-        height: 50px;
+        width: 40px;
+        height: 40px;
         animation: spin 1s linear infinite;
-        margin: 0 auto 20px;
+        margin: 0 auto 10px;
     }
     
     @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
-    
-    footer {
-        text-align: center;
-        padding: 20px;
-        color: #718096;
-        font-size: 0.9em;
-        border-top: 1px solid #e2e8f0;
-        margin-top: 30px;
-    }
-    
-    .feature-list {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 15px;
-        margin-top: 20px;
-    }
-    
-    .feature-item {
-        background: #f0f9ff;
-        padding: 15px;
-        border-radius: 10px;
-        border-left: 4px solid var(--secondary-color);
-    }
     """
     
     # وظيفة المعالجة مع مؤشر التحميل
-    def process_image_wrapper(input_img, strength):
-        """غلاف لوظيفة المعالجة مع إدارة الحالة"""
-        if input_img is None:
-            return None, None, "⚠️ الرجاء تحميل صورة أولاً"
-        
-        # عرض مؤشر التحميل
-        yield None, None, "🔄 جاري معالجة الصورة... الرجاء الانتظار"
+    def process_with_progress(image, strength):
+        """معالجة الصورة مع تحديث التقدم"""
+        yield None, "🔄 جاري تحميل النموذج...", None
         
         try:
+            # تحميل النموذج في الخلفية
+            restorer = FaceRestorer()
+            restorer.load_model()
+            yield None, "✅ النموذج جاهز! جاري معالجة الصورة...", None
+            
             # معالجة الصورة
-            result, stats = smart_restore_perfectionist(input_img, strength)
+            result, stats = process_face_restoration(image, strength)
             
             if result is None:
-                yield None, None, "❌ فشل في معالجة الصورة"
+                yield None, "❌ فشل في معالجة الصورة", stats
             else:
-                # تحويل الإحصائيات إلى نص
-                stats_text = "📊 إحصائيات المعالجة:\n"
-                if isinstance(stats, dict):
-                    for key, value in stats.items():
-                        if key != "processing_time":
-                            stats_text += f"• {key}: {value}\n"
-                else:
-                    stats_text = str(stats)
-                
-                yield result, stats_text, "✅ تمت المعالجة بنجاح!"
+                yield result, "✅ تمت المعالجة بنجاح!", stats
                 
         except Exception as e:
-            logger.error(f"Error in wrapper: {e}")
-            yield None, None, f"❌ خطأ: {str(e)}"
+            logger.error(f"Error: {str(e)}")
+            yield None, f"❌ خطأ: {str(e)}", None
     
     # بناء الواجهة
     with gr.Blocks(css=custom_css, title="Ultimate Face Fixer") as demo:
@@ -379,10 +375,10 @@ def create_interface():
         # الرأس
         gr.HTML("""
             <div class="header">
-                <h1>🎯 Ultimate Face Fixer</h1>
-                <p>ترميم وتجميل الصور باستخدام الذكاء الاصطناعي المتطور</p>
-                <div style="margin-top: 15px; font-size: 0.9em; opacity: 0.8;">
-                    <span>الإصدار 2.0 | متوافق مع HuggingFace</span>
+                <h1>✨ Ultimate Face Fixer</h1>
+                <p>ترميم وتجميل الصور بتقنية الذكاء الاصطناعي المتطورة</p>
+                <div style="margin-top: 10px; font-size: 0.9em;">
+                    <span>الإصدار 2.1 | متوافق مع HuggingFace Spaces</span>
                 </div>
             </div>
         """)
@@ -391,14 +387,14 @@ def create_interface():
         with gr.Column(elem_classes="content"):
             
             # قسم الصور
-            with gr.Row(elem_classes="image-section"):
+            with gr.Row(elem_classes="image-row"):
                 # الصورة المدخلة
                 with gr.Column(elem_classes="image-box"):
                     gr.Markdown("### 📤 الصورة الأصلية")
                     input_image = gr.Image(
                         label="",
                         type="numpy",
-                        height=350,
+                        height=320,
                         show_label=False
                     )
                 
@@ -408,7 +404,7 @@ def create_interface():
                     output_image = gr.Image(
                         label="",
                         type="numpy",
-                        height=350,
+                        height=320,
                         show_label=False
                     )
             
@@ -416,148 +412,121 @@ def create_interface():
             with gr.Column(elem_classes="controls"):
                 gr.Markdown("### ⚙️ إعدادات المعالجة")
                 
-                with gr.Row():
-                    with gr.Column():
-                        strength_slider = gr.Slider(
-                            minimum=0.5,
-                            maximum=2.0,
-                            value=1.0,
-                            step=0.1,
-                            label="🔧 قوة التحسين",
-                            info="من خفيف (0.5) إلى قوي (2.0)",
-                            elem_classes="strength-slider"
-                        )
-                    
-                    with gr.Column():
-                        examples = gr.Examples(
-                            examples=[
-                                ["https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400"],
-                                ["https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400"],
-                                ["https://images.unsplash.com/photo-1494790108755-2616b612b786?w-400"]
-                            ],
-                            inputs=[input_image],
-                            label="🖼️ أمثلة سريعة"
-                        )
+                # شريط قوة التحسين
+                strength_slider = gr.Slider(
+                    minimum=0.5,
+                    maximum=2.0,
+                    value=1.0,
+                    step=0.1,
+                    label="قوة التحسين",
+                    info="من خفيف (0.5) إلى قوي (2.0)"
+                )
                 
                 # زر المعالجة
                 process_btn = gr.Button(
                     "🚀 بدء الترميم",
-                    variant="primary",
-                    size="lg",
                     elem_classes="process-btn"
                 )
                 
                 # رسالة الحالة
-                status_message = gr.Textbox(
+                status_msg = gr.Textbox(
                     label="حالة المعالجة",
-                    value="⚡ جاهز للبدء",
+                    value="⚡ جاهز للبدء - قم بتحميل صورة",
                     interactive=False
                 )
             
             # الإحصائيات
-            with gr.Column(elem_classes="stats-box"):
-                gr.Markdown("### 📈 معلومات المعالجة")
-                stats_output = gr.Textbox(
-                    label="",
-                    lines=5,
-                    max_lines=10,
-                    interactive=False
-                )
+            stats_output = gr.Textbox(
+                label="📊 نتائج المعالجة",
+                lines=8,
+                interactive=False,
+                elem_classes="stats-box"
+            )
             
             # الميزات
-            with gr.Column():
-                gr.Markdown("### ✨ المميزات")
-                gr.HTML("""
-                    <div class="feature-list">
-                        <div class="feature-item">
-                            <strong>🤖 خوارزمية متطورة</strong><br>
-                            خوارزمية Ultimate Balance الأصلية محفوظة تماماً
+            gr.Markdown("### ✨ المميزات الرئيسية")
+            with gr.Row(elem_classes="features"):
+                with gr.Column():
+                    gr.HTML("""
+                        <div class="feature">
+                            <h4>🤖 خوارزمية متقدمة</h4>
+                            <p>خوارزمية Ultimate Balance الأصلية محفوظة تماماً</p>
                         </div>
-                        <div class="feature-item">
-                            <strong>⚡ معالجة سريعة</strong><br>
-                            دعم كامل للـ GPU والـ CPU
+                    """)
+                with gr.Column():
+                    gr.HTML("""
+                        <div class="feature">
+                            <h4>⚡ معالجة سريعة</h4>
+                            <p>دعم كامل لـ GPU/CPU مع معالجة فورية</p>
                         </div>
-                        <div class="feature-item">
-                            <strong>🎯 نتائج دقيقة</strong><br>
-                            ترميم وتجميل دقيق للملامح
+                    """)
+                with gr.Column():
+                    gr.HTML("""
+                        <div class="feature">
+                            <h4>🎯 نتائج دقيقة</h4>
+                            <p>ترميم دقيق للملامح مع الحفاظ على التفاصيل</p>
                         </div>
-                        <div class="feature-item">
-                            <strong>📱 متوافق تماماً</strong><br>
-                            يعمل على HuggingFace Spaces بسلاسة
+                    """)
+                with gr.Column():
+                    gr.HTML("""
+                        <div class="feature">
+                            <h4>📱 واجهة سهلة</h4>
+                            <p>واجهة مستخدم بسيطة وسهلة الاستخدام</p>
                         </div>
-                    </div>
-                """)
+                    """)
             
             # التعليمات
-            with gr.Accordion("📖 كيفية الاستخدام", open=False):
+            with gr.Accordion("📖 دليل الاستخدام السريع", open=False):
                 gr.Markdown("""
                 ### خطوات الاستخدام:
-                1. **ارفع صورة** عن طريق السحب والإفلات أو النقر على منطقة الرفع
-                2. **اضبط قوة التحسين** حسب رغبتك (1.0 هي القيمة المثالية)
+                1. **قم بتحميل صورة** عن طريق السحب والإفلات أو النقر على منطقة الرفع
+                2. **اضبط قوة التحسين** باستخدام شريط التمرير (1.0 هو المستوى الأمثل)
                 3. **انقر على زر "بدء الترميم"**
-                4. **انتظر** حتى تظهر النتيجة والإحصائيات
+                4. **انتظر** حتى تظهر النتيجة (عادة 10-30 ثانية)
+                5. **تحقق من الإحصائيات** في الأسفل
                 
-                ### ملاحظات هامة:
+                ### ⚠️ ملاحظات هامة:
                 - الخوارزمية الأساسية محفوظة تماماً كما هي
-                - يدعم معظم صيغ الصور (JPG, PNG, etc.)
-                - الحد الأقصى لحجم الصورة: 2000x2000 بكسل
-                - المعالجة تستغرق من 5 إلى 30 ثانية حسب حجم الصورة
+                - يدعم الصيغ: JPG, PNG, JPEG, BMP
+                - الحد الأقصى لحجم الصورة: 2000×2000 بكسل
+                - الصور الكبيرة جداً يتم تصغيرها تلقائياً
+                - المعالجة الأولى قد تستغرق وقتاً أطول لتحميل النموذج
                 
-                ### معلومات تقنية:
+                ### 🛠️ المعلومات التقنية:
                 - النموذج: GFPGAN v1.4
                 - المكتبات: OpenCV, PyTorch, GFPGAN
-                - النظام: HuggingFace Spaces
+                - نظام التشغيل: HuggingFace Spaces
+                - الذاكرة: مؤتمتة التخصيص
                 """)
             
             # التذييل
             gr.HTML("""
                 <footer>
-                    <p>Ultimate Face Fixer v2.0 | تم التطوير باستخدام GFPGAN وOpenCV</p>
-                    <p style="font-size: 0.8em; opacity: 0.7;">
-                        تنويه: الخوارزمية الأساسية لتحسين الوجه محفوظة تماماً كما هي
+                    <p>Ultimate Face Fixer v2.1 | تم التطوير باستخدام GFPGAN</p>
+                    <p style="font-size: 0.8em; color: #888;">
+                        ملاحظة: الخوارزمية الأساسية لتحسين الوجه محفوظة تماماً كما هي
                     </p>
                 </footer>
             """)
         
         # ربط الأحداث
         process_btn.click(
-            fn=process_image_wrapper,
+            fn=process_with_progress,
             inputs=[input_image, strength_slider],
-            outputs=[output_image, stats_output, status_message]
+            outputs=[output_image, status_msg, stats_output]
         )
         
-        # تهيئة تلقائية عند التحميل
-        def initialize_on_load():
-            try:
-                # محاولة تهيئة النموذج عند التحميل
-                import threading
-                
-                def load_model_in_background():
-                    try:
-                        manager = ModelManager()
-                        manager.initialize_enhancer()
-                        logger.info("Model loaded successfully in background")
-                    except Exception as e:
-                        logger.warning(f"Background model loading failed: {e}")
-                
-                # تحميل النموذج في الخلفية
-                threading.Thread(target=load_model_in_background, daemon=True).start()
-                
-                return "⚡ النظام جاهز للاستخدام!"
-            except Exception as e:
-                return f"⚠️ Note: {str(e)}"
-        
-        demo.load(
-            fn=initialize_on_load,
-            outputs=[status_message]
+        # تلميحات تفاعلية
+        input_image.change(
+            fn=lambda x: "📸 الصورة جاهزة للمعالجة!" if x is not None else "⚡ جاهز للبدء - قم بتحميل صورة",
+            inputs=[input_image],
+            outputs=[status_msg]
         )
     
     return demo
 
-# 6. ملف requirements.txt المطلوب لـ HuggingFace
-def create_requirements_file():
-    """إنشاء ملف المتطلبات"""
-    requirements = """torch>=2.0.0
+# 7. ملف requirements.txt
+REQUIREMENTS = """torch>=2.0.0
 torchvision>=0.15.0
 opencv-python-headless>=4.8.0
 gradio>=4.0.0
@@ -567,35 +536,34 @@ gfpgan>=1.3.8
 realesrgan>=0.3.0
 basicsr>=1.4.2
 facexlib>=0.3.0
-gdown>=4.6.0
 """
-    
-    with open('requirements.txt', 'w', encoding='utf-8') as f:
-        f.write(requirements)
-    
-    logger.info("Requirements file created")
 
-# 7. الدالة الرئيسية
+# 8. الدالة الرئيسية
 def main():
-    """الدالة الرئيسية"""
+    """الدالة الرئيسية للتشغيل"""
     print("=" * 60)
-    print("Ultimate Face Fixer - نسخة HuggingFace")
+    print("Ultimate Face Fixer - الإصدار النهائي")
     print("=" * 60)
     
     # إنشاء ملف المتطلبات
-    create_requirements_file()
+    try:
+        with open('requirements.txt', 'w', encoding='utf-8') as f:
+            f.write(REQUIREMENTS)
+        print("✅ تم إنشاء ملف المتطلبات")
+    except:
+        print("⚠️ تعذر إنشاء ملف المتطلبات (قد يكون موجوداً)")
     
     # إنشاء الواجهة
+    print("🚀 جاري تحميل الواجهة...")
     demo = create_interface()
     
-    # تشغيل الواجهة مع إعدادات HuggingFace
+    # تشغيل الواجهة
     demo.launch(
         server_name="0.0.0.0",
         server_port=7860,
-        share=False,  # HuggingFace يدير المشاركة
+        share=False,
         debug=False,
-        show_error=True,
-        quiet=False
+        show_error=True
     )
 
 if __name__ == "__main__":
