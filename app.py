@@ -25,7 +25,7 @@ bg_upsampler = RealESRGANer(
     tile=400,
     tile_pad=10,
     pre_pad=0,
-    half=True if torch.cuda.is_value_available() else False
+    half=False # تم التعطيل ليعمل على السيرفر المجاني بكفاءة
 )
 
 # محرك الوجه (GFPGAN) مع دمج محرك الخلفية فيه
