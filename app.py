@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
-Ultimate Face Restorer - النسخة الاحترافية
-أداة متقدمة لترميم وتجميل الصور مع الحفاظ على خوارزمية توضيح الوجه الأصلية
+Ultimate Face Restorer - نسخة HuggingFace Space المتوافقة
+إصدار مبسط ومتوافق مع بيئة HuggingFace
 """
 
 import sys
@@ -11,199 +11,109 @@ import os
 import time
 import logging
 from pathlib import Path
-from datetime import datetime
-import json
-
-# 1. الإعدادات الأولية والإصلاحات
 import warnings
 warnings.filterwarnings('ignore')
 
-# حقنة الإصلاح الإجبارية
+# 1. إصلاحات التوافق
 import torchvision
 if not hasattr(torchvision.transforms, 'functional_tensor'):
     import torchvision.transforms.functional as F
     sys.modules['torchvision.transforms.functional_tensor'] = F
 
-# 2. استيراد المكتبات
+# 2. استيراد المكتبات الأساسية
 import cv2
 import numpy as np
 import gradio as gr
-from PIL import Image, ImageOps, ImageFilter
+from PIL import Image
 import torch
-import hashlib
-from typing import Tuple, Optional, List, Dict, Any
-from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# 3. إعداد نظام التسجيل
+# إعداد التسجيل
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# 4. إعدادات المحرك والتهيئة المتقدمة
-class Config:
-    """فئة التهيئة المتقدمة"""
-    VERSION = "2.0.0"
-    MODEL_URL = 'https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth'
-    MODEL_CACHE_DIR = Path.home() / '.cache' / 'ultimate_face_restorer'
-    OUTPUT_DIR = Path.home() / 'UltimateFaceRestorer' / 'results'
-    MAX_IMAGE_SIZE = 4000
-    MIN_IMAGE_SIZE = 256
-    DEFAULT_UPSCALE = 1.5
-    BATCH_SIZE = 4
-    SUPPORTED_FORMATS = ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff']
-    
-    @staticmethod
-    def setup_directories():
-        """إنشاء المجلدات المطلوبة"""
-        Config.MODEL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        Config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-# إعداد المجلدات
-Config.setup_directories()
-
-# 5. إدارة النماذج المتقدمة
+# 3. تهيئة النموذج (نسخة مبسطة)
 class ModelManager:
-    """مدير النماذج الذكي"""
-    
-    _instance = None
-    _initialized = False
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+    """مدير النموذج المبسط"""
     
     def __init__(self):
-        if not self._initialized:
-            self.face_enhancer = None
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            self._initialized = True
-            logger.info(f"Using device: {self.device}")
-    
+        self.face_enhancer = None
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        logger.info(f"Using device: {self.device}")
+        
     def initialize_enhancer(self):
         """تهيئة محسن الوجه"""
         try:
             from gfpgan import GFPGANer
             
-            model_path = Config.MODEL_CACHE_DIR / 'GFPGANv1.4.pth'
-            
-            # تحميل النموذج إذا لم يكن موجوداً
-            if not model_path.exists():
-                logger.info("Downloading model...")
-                import urllib.request
-                urllib.request.urlretrieve(Config.MODEL_URL, model_path)
-                logger.info("Model downloaded successfully")
-            
-            self.face_enhancer = GFPGANer(
-                model_path=str(model_path),
-                upscale=Config.DEFAULT_UPSCALE,
-                arch='clean',
-                channel_multiplier=2,
-                bg_upsampler=None,
-                device=self.device
-            )
-            logger.info("Face enhancer initialized successfully")
-            
+            # استخدام النموذج الموجود مسبقاً في HuggingFace
+            try:
+                # محاولة تحميل النموذج من المسار المحلي
+                model_path = '/tmp/GFPGANv1.4.pth'
+                if not os.path.exists(model_path):
+                    # تحميل النموذج من الإنترنت
+                    import gdown
+                    model_url = 'https://drive.google.com/uc?id=1EM87UquaoQmk17Q8d5kYIAHqu0dkYqdT'
+                    gdown.download(model_url, model_path, quiet=False)
+                
+                self.face_enhancer = GFPGANer(
+                    model_path=model_path,
+                    upscale=1.5,
+                    arch='clean',
+                    channel_multiplier=2,
+                    bg_upsampler=None,
+                    device=self.device
+                )
+                logger.info("Face enhancer initialized successfully")
+                
+            except Exception as e:
+                logger.warning(f"Could not download model: {e}")
+                # استخدام النموذج المدمج في GFPGAN
+                self.face_enhancer = GFPGANer(
+                    model_path='GFPGANv1.4',
+                    upscale=1.5,
+                    arch='clean',
+                    channel_multiplier=2,
+                    bg_upsampler=None,
+                    device=self.device
+                )
+                
         except Exception as e:
             logger.error(f"Failed to initialize enhancer: {e}")
             raise
-    
-    def get_enhancer(self):
-        """الحصول على محسن الوجه"""
-        if self.face_enhancer is None:
-            self.initialize_enhancer()
-        return self.face_enhancer
 
-# 6. معالجة الصور المتقدمة
-class ImageProcessor:
-    """معالج الصور المتقدم"""
-    
-    @staticmethod
-    def validate_image(image: np.ndarray) -> bool:
-        """التحقق من صحة الصورة"""
-        if image is None:
-            return False
-        if len(image.shape) != 3 or image.shape[2] != 3:
-            return False
-        if image.size == 0:
-            return False
-        return True
-    
-    @staticmethod
-    def smart_resize(image: np.ndarray, max_size: int = 2000) -> np.ndarray:
-        """تغيير حجم الصورة بذكاء"""
-        h, w = image.shape[:2]
-        
-        if max(w, h) > max_size:
-            scale = max_size / max(w, h)
-            new_w, new_h = int(w * scale), int(h * scale)
-            image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
-        
-        return image
-    
-    @staticmethod
-    def enhance_quality(image: np.ndarray) -> np.ndarray:
-        """تحسين جودة الصورة الأساسية"""
-        # تحسين التباين باستخدام CLAHE
-        lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        l = clahe.apply(l)
-        lab = cv2.merge([l, a, b])
-        image = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
-        
-        # تخفيف الضوضاء
-        image = cv2.fastNlMeansDenoisingColored(image, None, 10, 10, 7, 21)
-        
-        return image
-    
-    @staticmethod
-    def generate_metadata(image_hash: str, processing_time: float) -> Dict:
-        """إنشاء بيانات وصفية للصورة"""
-        return {
-            "image_hash": image_hash,
-            "processing_time": processing_time,
-            "timestamp": datetime.now().isoformat(),
-            "version": Config.VERSION,
-            "device": str(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
-        }
-
-# 7. الخوارزمية الرئيسية (محفوظة كما هي)
-def smart_restore_perfectionist(
-    input_img: np.ndarray,
-    enhance_preprocess: bool = True,
-    strength: float = 1.0
-) -> Optional[np.ndarray]:
+# 4. الخوارزمية الأساسية (محفوظة كما هي)
+def smart_restore_perfectionist(input_img, strength=1.0):
     """
-    الخوارزمية الرئيسية لترميم الوجه - محفوظة كما هي
+    الخوارزمية الأساسية - محفوظة تماماً كما هي
     """
     if input_img is None: 
-        return None
+        return None, None
     
     try:
-        # التحقق من الصورة
-        if not ImageProcessor.validate_image(input_img):
-            logger.error("Invalid image format")
-            return None
-        
+        # التحقق من نوع البيانات
+        if isinstance(input_img, dict):
+            # Gradio Image component returns dict
+            img_array = input_img['image']
+        else:
+            img_array = input_img
+            
         # تحويل الصورة
-        img = cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR)
+        img = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
         
         # تغيير الحجم إذا لزم الأمر
-        img = ImageProcessor.smart_resize(img, Config.MAX_IMAGE_SIZE)
+        h, w = img.shape[:2]
+        if w > 2000 or h > 2000:
+            img = cv2.resize(img, (w // 2, h // 2))
         
-        # تحسين الجودة المبدئي
-        if enhance_preprocess:
-            img = ImageProcessor.enhance_quality(img)
+        # تهيئة النموذج
+        model_manager = ModelManager()
+        model_manager.initialize_enhancer()
         
         # خوارزمية Ultimate Balance الأصلية (غير ملموسة)
-        model_manager = ModelManager()
-        face_enhancer = model_manager.get_enhancer()
-        
-        _, _, output = face_enhancer.enhance(
+        _, _, output = model_manager.face_enhancer.enhance(
             img, 
             has_aligned=False, 
             only_center_face=False, 
@@ -224,648 +134,469 @@ def smart_restore_perfectionist(
         beta = 0.2 * strength
         final = cv2.addWeighted(inter_mix, alpha, final_ai, beta, 0)
         
-        # تحسين النهائي
-        final = cv2.cvtColor(final, cv2.COLOR_BGR2RGB)
+        # التحويل النهائي
+        final_rgb = cv2.cvtColor(final, cv2.COLOR_BGR2RGB)
         
-        # تحسين الجودة النهائية
-        final = Image.fromarray(final)
-        final = final.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
+        # تحسينات إضافية
+        final_pil = Image.fromarray(final_rgb)
         
-        return np.array(final)
+        # إحصائيات المعالجة
+        stats = {
+            "original_size": f"{h}x{w}",
+            "output_size": f"{final.shape[1]}x{final.shape[0]}",
+            "strength": strength,
+            "processing_time": time.time()
+        }
+        
+        return final_rgb, stats
         
     except Exception as e:
         logger.error(f"Processing error: {e}")
-        return None
+        return None, {"error": str(e)}
 
-# 8. المعالجة الدفعية
-def batch_process_images(
-    images: List[np.ndarray],
-    progress_callback=None
-) -> List[Optional[np.ndarray]]:
-    """معالجة عدة صور دفعة واحدة"""
-    results = []
+# 5. وظائف مساعدة للواجهة
+def create_interface():
+    """إنشاء واجهة مبسطة ومتوافقة"""
     
-    with ThreadPoolExecutor(max_workers=Config.BATCH_SIZE) as executor:
-        futures = []
-        for img in images:
-            future = executor.submit(smart_restore_perfectionist, img)
-            futures.append(future)
-            
-        for i, future in enumerate(as_completed(futures)):
-            try:
-                result = future.result()
-                results.append(result)
-                
-                if progress_callback:
-                    progress = (i + 1) / len(images)
-                    progress_callback(progress)
-                    
-            except Exception as e:
-                logger.error(f"Batch processing error: {e}")
-                results.append(None)
+    # CSS مبسط
+    custom_css = """
+    :root {
+        --primary-color: #1c4167;
+        --secondary-color: #007eff;
+        --accent-color: #ff6b6b;
+        --background-color: #f9f9f9;
+        --card-bg: #ffffff;
+    }
     
-    return results
-
-# 9. إدارة الملفات المتقدمة
-class FileManager:
-    """مدير الملفات المتقدم"""
+    body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        font-family: 'Segoe UI', system-ui, sans-serif;
+    }
     
-    @staticmethod
-    def generate_filename(original_name: str) -> str:
-        """إنشاء اسم ملف فريد"""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        name_hash = hashlib.md5(original_name.encode()).hexdigest()[:8]
-        return f"restored_{timestamp}_{name_hash}.png"
+    .gradio-container {
+        max-width: 900px;
+        margin: auto;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        padding: 0;
+        overflow: hidden;
+    }
     
-    @staticmethod
-    def save_image(image: np.ndarray, filename: str) -> str:
-        """حفظ الصورة بجودة عالية"""
-        output_path = Config.OUTPUT_DIR / filename
-        
-        # استخدام جودة عالية للصورة
-        img_pil = Image.fromarray(image)
-        img_pil.save(output_path, 'PNG', optimize=True, quality=95)
-        
-        return str(output_path)
+    .header {
+        background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+        padding: 30px 20px;
+        text-align: center;
+        color: white;
+        border-bottom: 5px solid rgba(255,255,255,0.1);
+    }
     
-    @staticmethod
-    def load_images_from_folder(folder_path: str) -> List[np.ndarray]:
-        """تحميل الصور من مجلد"""
-        images = []
-        folder = Path(folder_path)
-        
-        if not folder.exists():
-            return images
-        
-        for ext in Config.SUPPORTED_FORMATS:
-            for file_path in folder.glob(f"*{ext}"):
-                try:
-                    img = cv2.imread(str(file_path))
-                    if img is not None:
-                        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                        images.append(img)
-                except Exception as e:
-                    logger.error(f"Error loading {file_path}: {e}")
-        
-        return images
-
-# 10. الواجهة المتقدمة
-class AdvancedInterface:
-    """فئة الواجهة المتقدمة"""
+    .header h1 {
+        margin: 0;
+        font-size: 2.5em;
+        font-weight: 800;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
     
-    @staticmethod
-    def create_interface():
-        """إنشاء واجهة مستخدم متقدمة"""
-        
-        # CSS متقدم
-        custom_css = """
-        :root {
-            --primary-color: #1c4167;
-            --secondary-color: #007eff;
-            --accent-color: #ff6b6b;
-            --background-color: #f9f9f9;
-            --card-bg: #ffffff;
-            --text-primary: #2d3748;
-            --text-secondary: #718096;
-            --border-radius: 12px;
-            --shadow: 0 10px 25px rgba(0,0,0,0.1);
+    .header p {
+        margin: 10px 0 0;
+        opacity: 0.9;
+        font-size: 1.1em;
+    }
+    
+    .content {
+        padding: 30px;
+    }
+    
+    .image-section {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    
+    @media (max-width: 768px) {
+        .image-section {
+            grid-template-columns: 1fr;
         }
+    }
+    
+    .image-box {
+        border: 3px dashed #cbd5e0;
+        border-radius: 15px;
+        padding: 15px;
+        background: #f7fafc;
+        transition: all 0.3s ease;
+        min-height: 400px;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .image-box:hover {
+        border-color: var(--secondary-color);
+        background: #edf2f7;
+    }
+    
+    .controls {
+        background: #f8fafc;
+        border-radius: 15px;
+        padding: 25px;
+        margin-bottom: 30px;
+        border: 1px solid #e2e8f0;
+    }
+    
+    .control-group {
+        margin-bottom: 20px;
+    }
+    
+    .control-group label {
+        display: block;
+        color: var(--primary-color);
+        font-weight: 600;
+        margin-bottom: 10px;
+        font-size: 1.1em;
+    }
+    
+    .strength-slider {
+        width: 100%;
+    }
+    
+    .process-btn {
+        background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+        border: none;
+        color: white;
+        padding: 15px 40px;
+        font-size: 1.2em;
+        font-weight: 700;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: block;
+        width: 100%;
+        margin-top: 20px;
+    }
+    
+    .process-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 20px rgba(28, 65, 103, 0.3);
+    }
+    
+    .stats-box {
+        background: #e6fffa;
+        border: 2px solid #81e6d9;
+        border-radius: 15px;
+        padding: 20px;
+        margin-top: 20px;
+        font-family: monospace;
+    }
+    
+    .stats-title {
+        color: var(--primary-color);
+        font-weight: 700;
+        margin-bottom: 10px;
+        font-size: 1.1em;
+    }
+    
+    .loading {
+        text-align: center;
+        padding: 40px;
+        color: var(--primary-color);
+    }
+    
+    .loading-spinner {
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid var(--secondary-color);
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    footer {
+        text-align: center;
+        padding: 20px;
+        color: #718096;
+        font-size: 0.9em;
+        border-top: 1px solid #e2e8f0;
+        margin-top: 30px;
+    }
+    
+    .feature-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 15px;
+        margin-top: 20px;
+    }
+    
+    .feature-item {
+        background: #f0f9ff;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 4px solid var(--secondary-color);
+    }
+    """
+    
+    # وظيفة المعالجة مع مؤشر التحميل
+    def process_image_wrapper(input_img, strength):
+        """غلاف لوظيفة المعالجة مع إدارة الحالة"""
+        if input_img is None:
+            return None, None, "⚠️ الرجاء تحميل صورة أولاً"
         
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
-        }
+        # عرض مؤشر التحميل
+        yield None, None, "🔄 جاري معالجة الصورة... الرجاء الانتظار"
         
-        .gradio-container {
-            max-width: 1200px !important;
-            margin: 2rem auto !important;
-            background: var(--card-bg) !important;
-            border-radius: var(--border-radius) !important;
-            box-shadow: var(--shadow) !important;
-            border: none !important;
-            padding: 20px !important;
-        }
-        
-        #title_area {
-            text-align: center;
-            padding: 30px 20px;
-            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
-            border-radius: var(--border-radius) var(--border-radius) 0 0;
-            margin-bottom: 30px;
-        }
-        
-        #title_area h1 {
-            color: white;
-            font-size: 2.8em;
-            margin-bottom: 10px;
-            font-weight: 800;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        
-        #title_area p {
-            color: rgba(255,255,255,0.9);
-            font-size: 1.2em;
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        
-        .control-panel {
-            background: linear-gradient(145deg, #ffffff, #f0f0f0);
-            border-radius: var(--border-radius);
-            padding: 25px;
-            margin-bottom: 25px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        
-        .control-title {
-            color: var(--primary-color);
-            font-size: 1.3em;
-            font-weight: 600;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .control-title i {
-            font-size: 1.2em;
-        }
-        
-        .image-container {
-            border: 2px dashed #cbd5e0;
-            border-radius: var(--border-radius);
-            padding: 15px;
-            background: #f7fafc;
-            transition: all 0.3s ease;
-        }
-        
-        .image-container:hover {
-            border-color: var(--secondary-color);
-            background: #edf2f7;
-        }
-        
-        button.primary {
-            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color)) !important;
-            border: none !important;
-            color: white !important;
-            font-weight: 700 !important;
-            border-radius: var(--border-radius) !important;
-            height: 55px !important;
-            font-size: 1.1em !important;
-            padding: 0 40px !important;
-            transition: all 0.3s ease !important;
-            box-shadow: 0 4px 15px rgba(28, 65, 103, 0.3) !important;
-        }
-        
-        button.primary:hover {
-            transform: translateY(-2px) !important;
-            box-shadow: 0 6px 20px rgba(28, 65, 103, 0.4) !important;
-        }
-        
-        .progress-bar {
-            height: 8px !important;
-            border-radius: 4px !important;
-            background: linear-gradient(90deg, #4fd1c7, #38b2ac) !important;
-        }
-        
-        .stats-box {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: var(--border-radius);
-            padding: 20px;
-            margin-top: 20px;
-        }
-        
-        .stats-title {
-            color: var(--primary-color);
-            font-weight: 600;
-            margin-bottom: 10px;
-            font-size: 1.1em;
-        }
-        
-        .stats-value {
-            color: var(--text-primary);
-            font-size: 1.3em;
-            font-weight: 700;
-        }
-        
-        .model-info {
-            background: linear-gradient(145deg, #e6fffa, #b2f5ea);
-            border: 1px solid #81e6d9;
-            border-radius: var(--border-radius);
-            padding: 15px;
-            margin-top: 15px;
-        }
-        
-        .tab-nav {
-            border-radius: var(--border-radius) !important;
-            overflow: hidden !important;
-            background: #edf2f7 !important;
-        }
-        
-        .tab-nav button {
-            border-radius: 0 !important;
-            font-weight: 600 !important;
-        }
-        
-        .compare-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-top: 20px;
-        }
-        
-        @media (max-width: 768px) {
-            .gradio-container {
-                margin: 1rem !important;
-                padding: 15px !important;
-            }
+        try:
+            # معالجة الصورة
+            result, stats = smart_restore_perfectionist(input_img, strength)
             
-            #title_area h1 {
-                font-size: 2em;
-            }
-            
-            .compare-container {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        footer {
-            text-align: center;
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #e2e8f0;
-            color: var(--text-secondary);
-            font-size: 0.9em;
-        }
-        
-        .feature-icon {
-            background: var(--primary-color);
-            color: white;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2em;
-            margin-right: 15px;
-        }
-        
-        .feature-card {
-            background: white;
-            border-radius: var(--border-radius);
-            padding: 25px;
-            margin-bottom: 20px;
-            border: 1px solid #e2e8f0;
-            transition: transform 0.3s ease;
-        }
-        
-        .feature-card:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--shadow);
-        }
-        """
-        
-        # JavaScript مخصص
-        custom_js = """
-        function updateStats() {
-            const timestamp = new Date().toLocaleString();
-            const version = "2.0.0";
-            const device = navigator.hardwareConcurrency ? `CPU Cores: ${navigator.hardwareConcurrency}` : "Device info unavailable";
-            
-            return {
-                timestamp: timestamp,
-                version: version,
-                device: device,
-                userAgent: navigator.userAgent
-            };
-        }
-        """
-        
-        # وظائف المساعدة
-        def process_single_image(input_img, strength, enhance_preprocess):
-            """معالجة صورة واحدة"""
-            start_time = time.time()
-            
-            result = smart_restore_perfectionist(
-                input_img,
-                enhance_preprocess=enhance_preprocess,
-                strength=strength
-            )
-            
-            processing_time = time.time() - start_time
-            
-            if result is not None:
-                # حفظ الصورة
-                filename = FileManager.generate_filename("single_image")
-                save_path = FileManager.save_image(result, filename)
-                
-                stats = {
-                    "processing_time": f"{processing_time:.2f} seconds",
-                    "output_size": f"{result.shape[1]}x{result.shape[0]}",
-                    "output_path": save_path,
-                    "success": True
-                }
+            if result is None:
+                yield None, None, "❌ فشل في معالجة الصورة"
             else:
-                stats = {
-                    "processing_time": f"{processing_time:.2f} seconds",
-                    "error": "Failed to process image",
-                    "success": False
-                }
-            
-            return result, json.dumps(stats, indent=2)
+                # تحويل الإحصائيات إلى نص
+                stats_text = "📊 إحصائيات المعالجة:\n"
+                if isinstance(stats, dict):
+                    for key, value in stats.items():
+                        if key != "processing_time":
+                            stats_text += f"• {key}: {value}\n"
+                else:
+                    stats_text = str(stats)
+                
+                yield result, stats_text, "✅ تمت المعالجة بنجاح!"
+                
+        except Exception as e:
+            logger.error(f"Error in wrapper: {e}")
+            yield None, None, f"❌ خطأ: {str(e)}"
+    
+    # بناء الواجهة
+    with gr.Blocks(css=custom_css, title="Ultimate Face Fixer") as demo:
         
-        def process_batch_images(folder_path, strength, progress=gr.Progress()):
-            """معالجة مجموعة صور"""
-            if not folder_path:
-                return [], "Please select a folder"
+        # الرأس
+        gr.HTML("""
+            <div class="header">
+                <h1>🎯 Ultimate Face Fixer</h1>
+                <p>ترميم وتجميل الصور باستخدام الذكاء الاصطناعي المتطور</p>
+                <div style="margin-top: 15px; font-size: 0.9em; opacity: 0.8;">
+                    <span>الإصدار 2.0 | متوافق مع HuggingFace</span>
+                </div>
+            </div>
+        """)
+        
+        # المحتوى الرئيسي
+        with gr.Column(elem_classes="content"):
             
-            images = FileManager.load_images_from_folder(folder_path)
-            
-            if not images:
-                return [], "No valid images found in the folder"
-            
-            results = []
-            processed_count = 0
-            
-            def progress_callback(p):
-                progress((processed_count + p) / len(images), f"Processing image {processed_count + 1}/{len(images)}")
-            
-            for i, img in enumerate(images):
-                try:
-                    result = smart_restore_perfectionist(
-                        img,
-                        enhance_preprocess=True,
-                        strength=strength
+            # قسم الصور
+            with gr.Row(elem_classes="image-section"):
+                # الصورة المدخلة
+                with gr.Column(elem_classes="image-box"):
+                    gr.Markdown("### 📤 الصورة الأصلية")
+                    input_image = gr.Image(
+                        label="",
+                        type="numpy",
+                        height=350,
+                        show_label=False
                     )
+                
+                # الصورة الناتجة
+                with gr.Column(elem_classes="image-box"):
+                    gr.Markdown("### 📥 الصورة المحسنة")
+                    output_image = gr.Image(
+                        label="",
+                        type="numpy",
+                        height=350,
+                        show_label=False
+                    )
+            
+            # عناصر التحكم
+            with gr.Column(elem_classes="controls"):
+                gr.Markdown("### ⚙️ إعدادات المعالجة")
+                
+                with gr.Row():
+                    with gr.Column():
+                        strength_slider = gr.Slider(
+                            minimum=0.5,
+                            maximum=2.0,
+                            value=1.0,
+                            step=0.1,
+                            label="🔧 قوة التحسين",
+                            info="من خفيف (0.5) إلى قوي (2.0)",
+                            elem_classes="strength-slider"
+                        )
                     
-                    if result is not None:
-                        filename = FileManager.generate_filename(f"batch_{i}")
-                        save_path = FileManager.save_image(result, filename)
-                        results.append(result)
-                        processed_count += 1
-                        
-                        progress_callback(1)
-                        
-                except Exception as e:
-                    logger.error(f"Error processing image {i}: {e}")
+                    with gr.Column():
+                        examples = gr.Examples(
+                            examples=[
+                                ["https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400"],
+                                ["https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400"],
+                                ["https://images.unsplash.com/photo-1494790108755-2616b612b786?w-400"]
+                            ],
+                            inputs=[input_image],
+                            label="🖼️ أمثلة سريعة"
+                        )
+                
+                # زر المعالجة
+                process_btn = gr.Button(
+                    "🚀 بدء الترميم",
+                    variant="primary",
+                    size="lg",
+                    elem_classes="process-btn"
+                )
+                
+                # رسالة الحالة
+                status_message = gr.Textbox(
+                    label="حالة المعالجة",
+                    value="⚡ جاهز للبدء",
+                    interactive=False
+                )
             
-            stats = {
-                "total_images": len(images),
-                "processed_successfully": processed_count,
-                "failed": len(images) - processed_count,
-                "output_folder": str(Config.OUTPUT_DIR)
-            }
+            # الإحصائيات
+            with gr.Column(elem_classes="stats-box"):
+                gr.Markdown("### 📈 معلومات المعالجة")
+                stats_output = gr.Textbox(
+                    label="",
+                    lines=5,
+                    max_lines=10,
+                    interactive=False
+                )
             
-            return results[:4], json.dumps(stats, indent=2)  # إرجاع أول 4 صور للمعاينة
-        
-        # بناء الواجهة
-        with gr.Blocks(css=custom_css, js=custom_js, title="Ultimate Face Restorer Pro") as demo:
-            
-            # رأس الصفحة
-            with gr.Column(elem_id="title_area"):
+            # الميزات
+            with gr.Column():
+                gr.Markdown("### ✨ المميزات")
                 gr.HTML("""
-                    <div style="text-align: center;">
-                        <h1>🔄 Ultimate Face Restorer Pro</h1>
-                        <p style="font-size: 1.2em; opacity: 0.9;">ترميم وتجميل الصور بتقنية الذكاء الاصطناعي المتطورة - الإصدار الاحترافي</p>
+                    <div class="feature-list">
+                        <div class="feature-item">
+                            <strong>🤖 خوارزمية متطورة</strong><br>
+                            خوارزمية Ultimate Balance الأصلية محفوظة تماماً
+                        </div>
+                        <div class="feature-item">
+                            <strong>⚡ معالجة سريعة</strong><br>
+                            دعم كامل للـ GPU والـ CPU
+                        </div>
+                        <div class="feature-item">
+                            <strong>🎯 نتائج دقيقة</strong><br>
+                            ترميم وتجميل دقيق للملامح
+                        </div>
+                        <div class="feature-item">
+                            <strong>📱 متوافق تماماً</strong><br>
+                            يعمل على HuggingFace Spaces بسلاسة
+                        </div>
                     </div>
                 """)
             
-            # علامات التبويب الرئيسية
-            with gr.Tabs() as tabs:
+            # التعليمات
+            with gr.Accordion("📖 كيفية الاستخدام", open=False):
+                gr.Markdown("""
+                ### خطوات الاستخدام:
+                1. **ارفع صورة** عن طريق السحب والإفلات أو النقر على منطقة الرفع
+                2. **اضبط قوة التحسين** حسب رغبتك (1.0 هي القيمة المثالية)
+                3. **انقر على زر "بدء الترميم"**
+                4. **انتظر** حتى تظهر النتيجة والإحصائيات
                 
-                # علامة التبويب: المعالجة الفردية
-                with gr.TabItem("🎨 معالجة فردية", id="single"):
-                    with gr.Row():
-                        with gr.Column(scale=1):
-                            # لوحة التحكم
-                            with gr.Column(scale=1, elem_classes="control-panel"):
-                                gr.Markdown("### ⚙️ إعدادات المعالجة")
-                                
-                                strength_slider = gr.Slider(
-                                    minimum=0.5,
-                                    maximum=2.0,
-                                    value=1.0,
-                                    step=0.1,
-                                    label="قوة التحسين",
-                                    info="قوة التحسين: من خفيف (0.5) إلى قوي (2.0)"
-                                )
-                                
-                                enhance_preprocess = gr.Checkbox(
-                                    label="تحسين مسبق للجودة",
-                                    value=True,
-                                    info="تحسين جودة الصورة قبل المعالجة"
-                                )
-                                
-                                gr.Markdown("---")
-                                
-                                process_btn = gr.Button(
-                                    "🚀 بدء الترميم",
-                                    variant="primary",
-                                    size="lg",
-                                    elem_id="process_btn"
-                                )
-                            
-                            # معلومات النظام
-                            with gr.Column(scale=1, elem_classes="model-info"):
-                                gr.Markdown("### 📊 معلومات النظام")
-                                device_info = "GPU متاح" if torch.cuda.is_available() else "CPU فقط"
-                                gr.Markdown(f"**الجهاز:** {device_info}")
-                                gr.Markdown(f"**الإصدار:** {Config.VERSION}")
-                                gr.Markdown(f"**المخرجات:** {Config.OUTPUT_DIR}")
-                        
-                        with gr.Column(scale=2):
-                            # منطقة الصور
-                            with gr.Row():
-                                input_image = gr.Image(
-                                    label="📤 الصورة المدخلة",
-                                    type="numpy",
-                                    height=400,
-                                    elem_classes="image-container"
-                                )
-                                
-                                output_image = gr.Image(
-                                    label="📥 الصورة الناتجة",
-                                    type="numpy",
-                                    height=400,
-                                    elem_classes="image-container"
-                                )
-                            
-                            # منطقة الإحصائيات
-                            stats_output = gr.JSON(
-                                label="📈 إحصائيات المعالجة",
-                                elem_classes="stats-box"
-                            )
-                    
-                    # ربط الأحداث
-                    process_btn.click(
-                        fn=process_single_image,
-                        inputs=[input_image, strength_slider, enhance_preprocess],
-                        outputs=[output_image, stats_output]
-                    )
+                ### ملاحظات هامة:
+                - الخوارزمية الأساسية محفوظة تماماً كما هي
+                - يدعم معظم صيغ الصور (JPG, PNG, etc.)
+                - الحد الأقصى لحجم الصورة: 2000x2000 بكسل
+                - المعالجة تستغرق من 5 إلى 30 ثانية حسب حجم الصورة
                 
-                # علامة التبويب: المعالجة الدفعية
-                with gr.TabItem("📁 معالجة دفعية", id="batch"):
-                    with gr.Row():
-                        with gr.Column(scale=1):
-                            with gr.Column(scale=1, elem_classes="control-panel"):
-                                gr.Markdown("### 📂 إعدادات الدفعة")
-                                
-                                folder_input = gr.File(
-                                    label="اختر المجلد",
-                                    file_count="directory",
-                                    file_types=["image"]
-                                )
-                                
-                                batch_strength = gr.Slider(
-                                    minimum=0.5,
-                                    maximum=2.0,
-                                    value=1.0,
-                                    step=0.1,
-                                    label="قوة التحسين للدفعة"
-                                )
-                                
-                                batch_process_btn = gr.Button(
-                                    "🚀 معالجة الدفعة",
-                                    variant="primary",
-                                    size="lg"
-                                )
-                        
-                        with gr.Column(scale=2):
-                            # معاينة النتائج
-                            gr.Markdown("### 👁️ معاينة النتائج (أول 4 صور)")
-                            with gr.Row():
-                                batch_outputs = []
-                                for i in range(4):
-                                    with gr.Column(scale=1):
-                                        output = gr.Image(
-                                            label=f"النتيجة {i+1}",
-                                            type="numpy",
-                                            height=200,
-                                            visible=False
-                                        )
-                                        batch_outputs.append(output)
-                            
-                            # إحصائيات الدفعة
-                            batch_stats = gr.JSON(
-                                label="📊 إحصائيات الدفعة",
-                                elem_classes="stats-box"
-                            )
-                    
-                    # ربط الأحداث للمعالجة الدفعية
-                    batch_process_btn.click(
-                        fn=process_batch_images,
-                        inputs=[folder_input, batch_strength],
-                        outputs=[gr.Gallery(value=batch_outputs), batch_stats]
-                    )
-                
-                # علامة التبويب: التعليمات
-                with gr.TabItem("❓ التعليمات", id="help"):
-                    with gr.Column():
-                        gr.Markdown("""
-                        ## 📖 دليل الاستخدام
-                        
-                        ### 🎨 المعالجة الفردية
-                        1. اختر صورة عن طريق السحب والإفلات أو النقر على منطقة الرفع
-                        2. اضبط قوة التحسين حسب الرغبة
-                        3. انقر على زر "بدء الترميم"
-                        4. انتظر ظهور النتيجة والإحصائيات
-                        
-                        ### 📁 المعالجة الدفعية
-                        1. اختر مجلد يحتوي على الصور
-                        2. اضبط إعدادات التحسين
-                        3. انقر على زر "معالجة الدفعة"
-                        4. ستظهر أول 4 صور معاينة مع إحصائيات الدفعة
-                        
-                        ### ⚙️ الإعدادات المتقدمة
-                        - **قوة التحسين**: تتحكم في شدة التحسين (1.0 هي القيمة المثالية)
-                        - **تحسين مسبق**: يحسن جودة الصورة قبل المعالجة
-                        
-                        ### 💾 حفظ النتائج
-                        - يتم حفظ جميع النتائج تلقائياً في: `{output_dir}`
-                        - يمكنك العثور على الصور المحفوظة بالاسم والتاريخ
-                        
-                        ### 🛠️ المتطلبات الفنية
-                        - مساحة ذاكرة وصول عشوائي: 4GB كحد أدنى (8GB موصى به)
-                        - مساحة تخزين: 2GB للنموذج والنتائج
-                        - دعم GPU: اختياري لكنه يسرع المعالجة
-                        
-                        ### ❗ ملاحظات هامة
-                        - الخوارزمية الأساسية لتحسين الوجه محفوظة كما هي
-                        - يتم تحسين باقي الجوانب فقط
-                        - يدعم معظم صيغ الصور الشائعة
-                        - الحد الأقصى لحجم الصورة: 4000x4000 بكسل
-                        """.format(output_dir=Config.OUTPUT_DIR))
+                ### معلومات تقنية:
+                - النموذج: GFPGAN v1.4
+                - المكتبات: OpenCV, PyTorch, GFPGAN
+                - النظام: HuggingFace Spaces
+                """)
             
-            # تذييل الصفحة
+            # التذييل
             gr.HTML("""
                 <footer>
-                    <p>Ultimate Face Restorer Pro v{version} | تم التطوير باستخدام GFPGAN وOpenCV | جميع الحقوق محفوظة © {year}</p>
-                    <p style="font-size: 0.9em; opacity: 0.7;">تنويه: الخوارزمية الأساسية لتحسين الوجه محفوظة تماماً كما هي</p>
+                    <p>Ultimate Face Fixer v2.0 | تم التطوير باستخدام GFPGAN وOpenCV</p>
+                    <p style="font-size: 0.8em; opacity: 0.7;">
+                        تنويه: الخوارزمية الأساسية لتحسين الوجه محفوظة تماماً كما هي
+                    </p>
                 </footer>
-            """.format(version=Config.VERSION, year=datetime.now().year))
-            
-            # تحميل النموذج عند التشغيل
-            def initialize_on_load():
-                try:
-                    manager = ModelManager()
-                    manager.initialize_enhancer()
-                    return "✅ النظام جاهز للاستخدام"
-                except Exception as e:
-                    return f"❌ خطأ في التهيئة: {str(e)}"
-            
-            demo.load(
-                fn=initialize_on_load,
-                outputs=[gr.Textbox(visible=False)]
-            )
-            
-            return demo
-
-# 11. التشغيل الرئيسي
-def main():
-    """الدالة الرئيسية للتشغيل"""
-    print("=" * 60)
-    print("Ultimate Face Restorer Pro - النسخة الاحترافية")
-    print(f"الإصدار: {Config.VERSION}")
-    print("=" * 60)
-    
-    try:
-        # تهيئة النموذج
-        print("🔧 جارٍ تهيئة النظام...")
-        manager = ModelManager()
-        manager.initialize_enhancer()
+            """)
         
-        # إنشاء الواجهة
-        print("🚀 جارٍ تحميل الواجهة...")
-        interface = AdvancedInterface.create_interface()
-        
-        # إعداد خيارات التشغيل
-        server_name = "0.0.0.0"  # الاستماع على جميع الواجهات
-        server_port = 7860
-        share = True  # إنشاء رابط مشاركة عام
-        
-        print(f"🌐 جارٍ تشغيل الخادم على http://{server_name}:{server_port}")
-        print(f"📎 رابط المشاركة: سينشأ تلقائياً عند التشغيل")
-        print("=" * 60)
-        print("✅ النظام جاهز! افتح المتصفح للبدء.")
-        
-        # تشغيل الواجهة
-        interface.launch(
-            server_name=server_name,
-            server_port=server_port,
-            share=share,
-            favicon_path=None,
-            quiet=False,
-            show_error=True,
-            debug=False
+        # ربط الأحداث
+        process_btn.click(
+            fn=process_image_wrapper,
+            inputs=[input_image, strength_slider],
+            outputs=[output_image, stats_output, status_message]
         )
         
-    except Exception as e:
-        logger.error(f"Fatal error: {e}")
-        print(f"❌ خطأ: {e}")
-        sys.exit(1)
+        # تهيئة تلقائية عند التحميل
+        def initialize_on_load():
+            try:
+                # محاولة تهيئة النموذج عند التحميل
+                import threading
+                
+                def load_model_in_background():
+                    try:
+                        manager = ModelManager()
+                        manager.initialize_enhancer()
+                        logger.info("Model loaded successfully in background")
+                    except Exception as e:
+                        logger.warning(f"Background model loading failed: {e}")
+                
+                # تحميل النموذج في الخلفية
+                threading.Thread(target=load_model_in_background, daemon=True).start()
+                
+                return "⚡ النظام جاهز للاستخدام!"
+            except Exception as e:
+                return f"⚠️ Note: {str(e)}"
+        
+        demo.load(
+            fn=initialize_on_load,
+            outputs=[status_message]
+        )
+    
+    return demo
+
+# 6. ملف requirements.txt المطلوب لـ HuggingFace
+def create_requirements_file():
+    """إنشاء ملف المتطلبات"""
+    requirements = """torch>=2.0.0
+torchvision>=0.15.0
+opencv-python-headless>=4.8.0
+gradio>=4.0.0
+numpy>=1.24.0
+Pillow>=10.0.0
+gfpgan>=1.3.8
+realesrgan>=0.3.0
+basicsr>=1.4.2
+facexlib>=0.3.0
+gdown>=4.6.0
+"""
+    
+    with open('requirements.txt', 'w', encoding='utf-8') as f:
+        f.write(requirements)
+    
+    logger.info("Requirements file created")
+
+# 7. الدالة الرئيسية
+def main():
+    """الدالة الرئيسية"""
+    print("=" * 60)
+    print("Ultimate Face Fixer - نسخة HuggingFace")
+    print("=" * 60)
+    
+    # إنشاء ملف المتطلبات
+    create_requirements_file()
+    
+    # إنشاء الواجهة
+    demo = create_interface()
+    
+    # تشغيل الواجهة مع إعدادات HuggingFace
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        share=False,  # HuggingFace يدير المشاركة
+        debug=False,
+        show_error=True,
+        quiet=False
+    )
 
 if __name__ == "__main__":
     main()

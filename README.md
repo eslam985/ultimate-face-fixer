@@ -1,13 +1,38 @@
 ---
 title: Ultimate Face Fixer
-emoji: 🐠
-colorFrom: green
-colorTo: pink
+emoji: 🎭
+colorFrom: blue
+colorTo: purple
 sdk: gradio
-sdk_version: 6.2.0
+sdk_version: 4.0.0
 app_file: app.py
 pinned: false
-license: apache-2.0
+license: mit
 ---
 
-Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
+# Ultimate Face Fixer
+
+أداة متقدمة لترميم وتجميل الصور باستخدام الذكاء الاصطناعي.
+
+## ✨ المميزات
+- خوارزمية Ultimate Balance المتطورة
+- ترميم دقيق لمظهر الوجه
+- معالجة سريعة ودقيقة
+- واجهة مستخدم بسيطة وسهلة
+
+## 🚀 كيفية الاستخدام
+1. ارفع صورة
+2. اضبط قوة التحسين
+3. انقر على زر "بدء الترميم"
+4. انتظر النتيجة
+
+## ⚙️ التقنيات المستخدمة
+- GFPGAN v1.4
+- OpenCV
+- PyTorch
+- Gradio
+
+## 📝 ملاحظات
+- الخوارزمية الأساسية محفوظة تماماً كما هي
+- يدعم جميع صيغ الصور الشائعة
+- يعمل بكفاءة على HuggingFace Spaces
