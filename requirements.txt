@@ -1,7 +1,7 @@
-opencv-python
+opencv-python-headless
 numpy<2.0.0
-gradio
-torch==2.1.0
-torchvision==0.16.0
+torch
+torchvision
 gfpgan
-basicsr==1.4.2
+basicsr
+gradio
