@@ -2,8 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Ultimate Face Fixer - الإصدار النهائي المتوافق مع HuggingFace
-إصدار مبسط ومستقر يعمل بكامل طاقته
+Ultimate Face Fixer - الإصدار المعدل لـ Gradio 6.2.0 على HuggingFace
 """
 
 import sys
@@ -24,7 +23,7 @@ if not hasattr(torchvision.transforms, 'functional_tensor'):
 import cv2
 import numpy as np
 import gradio as gr
-from PIL import Image
+from PIL import Image, ImageFilter
 import torch
 
 # إعداد التسجيل
@@ -35,11 +34,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 3. إعداد المسارات
-MODEL_PATH = Path("/tmp/GFPGANv1.4.pth")
 os.environ['TORCH_HOME'] = '/tmp/torch_cache'
 os.environ['HUGGINGFACE_HUB_CACHE'] = '/tmp/huggingface_cache'
 
-# 4. مدير النموذج المبسط
+# 4. مدير النموذج
 class FaceRestorer:
     def __init__(self):
         self.model = None
@@ -54,9 +52,9 @@ class FaceRestorer:
         try:
             from gfpgan import GFPGANer
             
-            # تحميل النموذج المدمج (يعمل في HuggingFace)
+            # استخدام النموذج المدمج في HuggingFace
             self.model = GFPGANer(
-                model_path='GFPGANv1.4',  # استخدام النموذج المدمج
+                model_path='GFPGANv1.4',
                 upscale=1.5,
                 arch='clean',
                 channel_multiplier=2,
@@ -64,11 +62,11 @@ class FaceRestorer:
                 device=self.device
             )
             
-            logger.info("Model loaded successfully")
+            logger.info("✅ Model loaded successfully")
             return self.model
             
         except Exception as e:
-            logger.error(f"Error loading model: {e}")
+            logger.error(f"❌ Error loading model: {e}")
             raise
 
 # 5. الخوارزمية الأساسية (محفوظة كما هي)
@@ -80,10 +78,9 @@ def process_face_restoration(input_image, strength=1.0):
         if input_image is None:
             return None, "⚠️ الرجاء تحميل صورة أولاً"
         
-        # بدء التوقيت
         start_time = time.time()
         
-        # الحصول على مصفوفة الصورة
+        # الحصول على مصفوفة الصورة (تتوافق مع Gradio 6.x)
         if isinstance(input_image, dict):
             img_array = input_image['image']
         else:
@@ -103,7 +100,7 @@ def process_face_restoration(input_image, strength=1.0):
         restorer = FaceRestorer()
         model = restorer.load_model()
         
-        # خوارزمية Ultimate Balance الأصلية
+        # خوارزمية Ultimate Balance الأصلية (محفوظة كما هي)
         try:
             _, _, output = model.enhance(
                 img, 
@@ -112,7 +109,6 @@ def process_face_restoration(input_image, strength=1.0):
                 paste_back=True
             )
         except Exception as e:
-            # محاولة ثانية مع معلمات مختلفة
             logger.warning(f"First enhance attempt failed: {e}, trying again...")
             _, _, output = model.enhance(
                 img, 
@@ -142,7 +138,6 @@ def process_face_restoration(input_image, strength=1.0):
         # تحسين النهائي
         final_pil = Image.fromarray(final_rgb)
         if strength > 1.0:
-            # تحسين إضافي للقوة العالية
             final_pil = final_pil.filter(ImageFilter.UnsharpMask(radius=2, percent=100))
         
         final_array = np.array(final_pil)
@@ -165,12 +160,12 @@ def process_face_restoration(input_image, strength=1.0):
         return final_array, stats
         
     except Exception as e:
-        logger.error(f"Processing error: {str(e)}")
+        logger.error(f"❌ Processing error: {str(e)}")
         return None, f"❌ خطأ في المعالجة: {str(e)}"
 
 # 6. إنشاء الواجهة
 def create_interface():
-    """إنشاء واجهة متوافقة مع HuggingFace"""
+    """إنشاء واجهة متوافقة مع Gradio 6.2.0"""
     
     # CSS مبسط
     custom_css = """
@@ -182,167 +177,163 @@ def create_interface():
     }
     
     body {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        font-family: 'Segoe UI', system-ui, sans-serif;
-        margin: 0;
-        padding: 20px;
-        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        font-family: 'Segoe UI', system-ui, sans-serif !important;
+        margin: 0 !important;
+        padding: 20px !important;
+        min-height: 100vh !important;
     }
     
-    .container {
-        max-width: 1000px;
-        margin: 0 auto;
-        background: white;
-        border-radius: 20px;
-        box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-        overflow: hidden;
+    .gradio-container {
+        max-width: 1000px !important;
+        margin: 0 auto !important;
+        background: white !important;
+        border-radius: 20px !important;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.1) !important;
+        overflow: hidden !important;
+        padding: 0 !important;
     }
     
     .header {
-        background: linear-gradient(90deg, var(--primary), var(--secondary));
-        padding: 30px;
-        text-align: center;
-        color: white;
+        background: linear-gradient(90deg, var(--primary), var(--secondary)) !important;
+        padding: 30px !important;
+        text-align: center !important;
+        color: white !important;
+        margin: 0 !important;
     }
     
     .header h1 {
-        margin: 0;
-        font-size: 2.5em;
-        font-weight: 800;
+        margin: 0 !important;
+        font-size: 2.5em !important;
+        font-weight: 800 !important;
     }
     
     .header p {
-        margin: 10px 0 0;
-        opacity: 0.9;
-        font-size: 1.1em;
+        margin: 10px 0 0 !important;
+        opacity: 0.9 !important;
+        font-size: 1.1em !important;
     }
     
     .content {
-        padding: 30px;
+        padding: 30px !important;
     }
     
     .image-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-        margin-bottom: 30px;
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 20px !important;
+        margin-bottom: 30px !important;
     }
     
     @media (max-width: 768px) {
         .image-row {
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr !important;
         }
     }
     
     .image-box {
-        border: 3px dashed #ddd;
-        border-radius: 15px;
-        padding: 15px;
-        background: #f8f9fa;
-        min-height: 350px;
-        display: flex;
-        flex-direction: column;
+        border: 3px dashed #ddd !important;
+        border-radius: 15px !important;
+        padding: 15px !important;
+        background: #f8f9fa !important;
+        min-height: 350px !important;
+        display: flex !important;
+        flex-direction: column !important;
     }
     
     .controls {
-        background: #f8f9fa;
-        border-radius: 15px;
-        padding: 25px;
-        margin-bottom: 25px;
+        background: #f8f9fa !important;
+        border-radius: 15px !important;
+        padding: 25px !important;
+        margin-bottom: 25px !important;
+        border: 1px solid #e2e8f0 !important;
     }
     
     .control-group {
-        margin-bottom: 20px;
-    }
-    
-    .control-group label {
-        display: block;
-        color: var(--primary);
-        font-weight: 600;
-        margin-bottom: 8px;
+        margin-bottom: 20px !important;
     }
     
     .process-btn {
-        background: linear-gradient(90deg, var(--primary), var(--secondary));
-        border: none;
-        color: white;
-        padding: 15px 30px;
-        font-size: 1.2em;
-        font-weight: bold;
-        border-radius: 10px;
-        cursor: pointer;
-        width: 100%;
-        margin-top: 10px;
-        transition: all 0.3s;
+        background: linear-gradient(90deg, var(--primary), var(--secondary)) !important;
+        border: none !important;
+        color: white !important;
+        padding: 15px 30px !important;
+        font-size: 1.2em !important;
+        font-weight: bold !important;
+        border-radius: 10px !important;
+        cursor: pointer !important;
+        width: 100% !important;
+        margin-top: 10px !important;
+        transition: all 0.3s !important;
     }
     
     .process-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 20px rgba(28, 65, 103, 0.2);
+        transform: translateY(-2px) !important;
+        box-shadow: 0 10px 20px rgba(28, 65, 103, 0.2) !important;
     }
     
     .stats-box {
-        background: #e8f4ff;
-        border-radius: 15px;
-        padding: 20px;
-        margin-top: 20px;
-        font-family: monospace;
-        white-space: pre-wrap;
-        border-left: 5px solid var(--secondary);
+        background: #e8f4ff !important;
+        border-radius: 15px !important;
+        padding: 20px !important;
+        margin-top: 20px !important;
+        font-family: monospace !important;
+        white-space: pre-wrap !important;
+        border-left: 5px solid var(--secondary) !important;
     }
     
     .features {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 15px;
-        margin-top: 30px;
+        display: grid !important;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+        gap: 15px !important;
+        margin-top: 30px !important;
     }
     
     .feature {
-        background: #f0f7ff;
-        padding: 15px;
-        border-radius: 10px;
-        border-left: 4px solid var(--primary);
+        background: #f0f7ff !important;
+        padding: 15px !important;
+        border-radius: 10px !important;
+        border-left: 4px solid var(--primary) !important;
     }
     
     .feature h4 {
-        margin: 0 0 10px 0;
-        color: var(--primary);
+        margin: 0 0 10px 0 !important;
+        color: var(--primary) !important;
     }
     
     .feature p {
-        margin: 0;
-        color: #555;
-        font-size: 0.9em;
+        margin: 0 !important;
+        color: #555 !important;
+        font-size: 0.9em !important;
     }
     
     footer {
-        text-align: center;
-        padding: 20px;
-        color: #666;
-        font-size: 0.9em;
-        border-top: 1px solid #eee;
-        margin-top: 30px;
+        text-align: center !important;
+        padding: 20px !important;
+        color: #666 !important;
+        font-size: 0.9em !important;
+        border-top: 1px solid #eee !important;
+        margin-top: 30px !important;
     }
     
     .loading {
-        text-align: center;
-        padding: 20px;
+        text-align: center !important;
+        padding: 20px !important;
     }
     
     .loading-spinner {
-        border: 4px solid #f3f3f3;
-        border-top: 4px solid var(--secondary);
-        border-radius: 50%;
-        width: 40px;
-        height: 40px;
-        animation: spin 1s linear infinite;
-        margin: 0 auto 10px;
+        border: 4px solid #f3f3f3 !important;
+        border-top: 4px solid var(--secondary) !important;
+        border-radius: 50% !important;
+        width: 40px !important;
+        height: 40px !important;
+        animation: spin 1s linear infinite !important;
+        margin: 0 auto 10px !important;
     }
     
     @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
+        0% { transform: rotate(0deg) !important; }
+        100% { transform: rotate(360deg) !important; }
     }
     """
     
@@ -352,12 +343,10 @@ def create_interface():
         yield None, "🔄 جاري تحميل النموذج...", None
         
         try:
-            # تحميل النموذج في الخلفية
             restorer = FaceRestorer()
             restorer.load_model()
             yield None, "✅ النموذج جاهز! جاري معالجة الصورة...", None
             
-            # معالجة الصورة
             result, stats = process_face_restoration(image, strength)
             
             if result is None:
@@ -378,7 +367,7 @@ def create_interface():
                 <h1>✨ Ultimate Face Fixer</h1>
                 <p>ترميم وتجميل الصور بتقنية الذكاء الاصطناعي المتطورة</p>
                 <div style="margin-top: 10px; font-size: 0.9em;">
-                    <span>الإصدار 2.1 | متوافق مع HuggingFace Spaces</span>
+                    <span>الإصدار 3.0 | متوافق مع Gradio 6.2.0</span>
                 </div>
             </div>
         """)
@@ -393,9 +382,7 @@ def create_interface():
                     gr.Markdown("### 📤 الصورة الأصلية")
                     input_image = gr.Image(
                         label="",
-                        type="numpy",
-                        height=320,
-                        show_label=False
+                        height=320
                     )
                 
                 # الصورة الناتجة
@@ -403,9 +390,7 @@ def create_interface():
                     gr.Markdown("### 📥 الصورة المحسنة")
                     output_image = gr.Image(
                         label="",
-                        type="numpy",
-                        height=320,
-                        show_label=False
+                        height=320
                     )
             
             # عناصر التحكم
@@ -425,6 +410,8 @@ def create_interface():
                 # زر المعالجة
                 process_btn = gr.Button(
                     "🚀 بدء الترميم",
+                    variant="primary",
+                    size="lg",
                     elem_classes="process-btn"
                 )
                 
@@ -496,13 +483,13 @@ def create_interface():
                 - النموذج: GFPGAN v1.4
                 - المكتبات: OpenCV, PyTorch, GFPGAN
                 - نظام التشغيل: HuggingFace Spaces
-                - الذاكرة: مؤتمتة التخصيص
+                - الإصدار: Gradio 6.2.0
                 """)
             
             # التذييل
             gr.HTML("""
                 <footer>
-                    <p>Ultimate Face Fixer v2.1 | تم التطوير باستخدام GFPGAN</p>
+                    <p>Ultimate Face Fixer v3.0 | تم التطوير باستخدام GFPGAN</p>
                     <p style="font-size: 0.8em; color: #888;">
                         ملاحظة: الخوارزمية الأساسية لتحسين الوجه محفوظة تماماً كما هي
                     </p>
@@ -525,39 +512,18 @@ def create_interface():
     
     return demo
 
-# 7. ملف requirements.txt
-REQUIREMENTS = """torch>=2.0.0
-torchvision>=0.15.0
-opencv-python-headless>=4.8.0
-gradio>=4.0.0
-numpy>=1.24.0
-Pillow>=10.0.0
-gfpgan>=1.3.8
-realesrgan>=0.3.0
-basicsr>=1.4.2
-facexlib>=0.3.0
-"""
-
-# 8. الدالة الرئيسية
+# 7. الدالة الرئيسية
 def main():
     """الدالة الرئيسية للتشغيل"""
     print("=" * 60)
-    print("Ultimate Face Fixer - الإصدار النهائي")
+    print("Ultimate Face Fixer - الإصدار 3.0")
     print("=" * 60)
-    
-    # إنشاء ملف المتطلبات
-    try:
-        with open('requirements.txt', 'w', encoding='utf-8') as f:
-            f.write(REQUIREMENTS)
-        print("✅ تم إنشاء ملف المتطلبات")
-    except:
-        print("⚠️ تعذر إنشاء ملف المتطلبات (قد يكون موجوداً)")
     
     # إنشاء الواجهة
     print("🚀 جاري تحميل الواجهة...")
     demo = create_interface()
     
-    # تشغيل الواجهة
+    # تشغيل الواجهة مع إعدادات HuggingFace
     demo.launch(
         server_name="0.0.0.0",
         server_port=7860,
@@ -566,5 +532,6 @@ def main():
         show_error=True
     )
 
+# 8. إذا كان الملف يعمل كـ __main__
 if __name__ == "__main__":
     main()
