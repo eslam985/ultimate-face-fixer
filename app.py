@@ -87,7 +87,7 @@ custom_css = """
 footer { display: none !important; }
 """
 
-with gr.Blocks(css=custom_css, theme=gr.themes.Soft()) as demo:
+with gr.Blocks() as demo:
     with gr.Column(elem_id="main_box"):
         gr.HTML("""
             <div style='text-align: center; padding: 10px;'>
@@ -112,4 +112,4 @@ with gr.Blocks(css=custom_css, theme=gr.themes.Soft()) as demo:
     )
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(css=custom_css, theme=gr.themes.Soft(), ssr_mode=False)
