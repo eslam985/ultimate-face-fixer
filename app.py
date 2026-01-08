@@ -2,24 +2,34 @@
 # -*- coding: utf-8 -*-
 
 """
-Ultimate Face Fixer - الإصدار المعدل لـ Gradio 6.2.0 على HuggingFace
+Ultimate Face Fixer - الإصدار النهائي المتكامل
+نسخة كاملة تعمل على HuggingFace Spaces
 """
 
 import sys
 import os
 import time
 import logging
-from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
 
-# 1. إصلاحات التوافق
+# 1. إعداد المسارات والبيئة
+os.environ['TORCH_HOME'] = '/tmp/torch_cache'
+os.environ['HUGGINGFACE_HUB_CACHE'] = '/tmp/huggingface_cache'
+os.environ['HF_HOME'] = '/tmp/huggingface'
+
+# إنشاء المجلدات المطلوبة
+os.makedirs('/tmp/torch_cache', exist_ok=True)
+os.makedirs('/tmp/huggingface_cache', exist_ok=True)
+os.makedirs('/tmp/huggingface', exist_ok=True)
+
+# 2. إصلاحات التوافق
 import torchvision
 if not hasattr(torchvision.transforms, 'functional_tensor'):
     import torchvision.transforms.functional as F
     sys.modules['torchvision.transforms.functional_tensor'] = F
 
-# 2. استيراد المكتبات الأساسية
+# 3. استيراد المكتبات الأساسية
 import cv2
 import numpy as np
 import gradio as gr
@@ -33,16 +43,60 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 3. إعداد المسارات
-os.environ['TORCH_HOME'] = '/tmp/torch_cache'
-os.environ['HUGGINGFACE_HUB_CACHE'] = '/tmp/huggingface_cache'
-
-# 4. مدير النموذج
+# 4. مدير النموذج المحسن
 class FaceRestorer:
     def __init__(self):
         self.model = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         logger.info(f"Using device: {self.device}")
+        self.model_path = None
+    
+    def download_model(self):
+        """تحميل النموذج إذا لم يكن موجوداً"""
+        try:
+            from basicsr.utils.download_util import load_file_from_url
+            
+            model_urls = {
+                'GFPGANv1.4': 'https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth',
+                'detection': 'https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth',
+                'parsing': 'https://github.com/xinntao/facexlib/releases/download/v0.2.2/parsing_parsenet.pth'
+            }
+            
+            model_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gfpgan/weights')
+            os.makedirs(model_dir, exist_ok=True)
+            
+            # تحميل النموذج الرئيسي
+            model_path = load_file_from_url(
+                url=model_urls['GFPGANv1.4'],
+                model_dir=model_dir,
+                progress=True,
+                file_name='GFPGANv1.4.pth'
+            )
+            
+            logger.info(f"Model downloaded to: {model_path}")
+            return model_path
+            
+        except Exception as e:
+            logger.error(f"Error downloading model: {e}")
+            # محاولة بديلة
+            try:
+                import requests
+                model_dir = '/tmp/models'
+                os.makedirs(model_dir, exist_ok=True)
+                model_path = os.path.join(model_dir, 'GFPGANv1.4.pth')
+                
+                if not os.path.exists(model_path):
+                    logger.info("Downloading model directly...")
+                    url = "https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth"
+                    response = requests.get(url, stream=True)
+                    with open(model_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                
+                return model_path
+            except Exception as e2:
+                logger.error(f"Alternative download failed: {e2}")
+                raise
     
     def load_model(self):
         """تحميل النموذج"""
@@ -52,21 +106,38 @@ class FaceRestorer:
         try:
             from gfpgan import GFPGANer
             
-            # استخدام النموذج المدمج في HuggingFace
-            self.model = GFPGANer(
-                model_path='GFPGANv1.4',
-                upscale=1.5,
-                arch='clean',
-                channel_multiplier=2,
-                bg_upsampler=None,
-                device=self.device
-            )
+            # محاولة استخدام النموذج المحمّل مسبقاً
+            try:
+                self.model = GFPGANer(
+                    model_path='gfpgan/weights/GFPGANv1.4.pth',
+                    upscale=1.5,
+                    arch='clean',
+                    channel_multiplier=2,
+                    bg_upsampler=None,
+                    device=self.device
+                )
+                logger.info("✅ Model loaded from local path")
+                
+            except Exception as e:
+                logger.warning(f"Local model not found: {e}, downloading...")
+                
+                # تحميل النموذج
+                model_path = self.download_model()
+                
+                self.model = GFPGANer(
+                    model_path=model_path,
+                    upscale=1.5,
+                    arch='clean',
+                    channel_multiplier=2,
+                    bg_upsampler=None,
+                    device=self.device
+                )
+                logger.info("✅ Model loaded after download")
             
-            logger.info("✅ Model loaded successfully")
             return self.model
             
         except Exception as e:
-            logger.error(f"❌ Error loading model: {e}")
+            logger.error(f"❌ Failed to load model: {e}")
             raise
 
 # 5. الخوارزمية الأساسية (محفوظة كما هي)
@@ -80,27 +151,30 @@ def process_face_restoration(input_image, strength=1.0):
         
         start_time = time.time()
         
-        # الحصول على مصفوفة الصورة (تتوافق مع Gradio 6.x)
+        # الحصول على مصفوفة الصورة
         if isinstance(input_image, dict):
             img_array = input_image['image']
-        else:
+        elif hasattr(input_image, 'shape'):
             img_array = input_image
+        else:
+            return None, "❌ تنسيق الصورة غير مدعوم"
         
         # تحويل الصورة
         img = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
         original_h, original_w = img.shape[:2]
         
         # تقليل الحجم إذا كان كبيراً
-        if original_w > 1000 or original_h > 1000:
-            scale = min(1000 / original_w, 1000 / original_h)
+        max_size = 1000
+        if original_w > max_size or original_h > max_size:
+            scale = min(max_size / original_w, max_size / original_h)
             new_w, new_h = int(original_w * scale), int(original_h * scale)
-            img = cv2.resize(img, (new_w, new_h))
+            img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
         
         # تحميل النموذج
         restorer = FaceRestorer()
         model = restorer.load_model()
         
-        # خوارزمية Ultimate Balance الأصلية (محفوظة كما هي)
+        # خوارزمية Ultimate Balance الأصلية
         try:
             _, _, output = model.enhance(
                 img, 
@@ -112,12 +186,12 @@ def process_face_restoration(input_image, strength=1.0):
             logger.warning(f"First enhance attempt failed: {e}, trying again...")
             _, _, output = model.enhance(
                 img, 
-                has_aligned=False, 
-                only_center_face=True, 
+                has_aligned=True, 
+                only_center_face=False, 
                 paste_back=True
             )
         
-        # المعالجة التالية (خوارزمية محفوظة)
+        # المعالجة التالية (خوارزمية محفوظة كما هي)
         silk = cv2.edgePreservingFilter(output, flags=1, sigma_s=30, sigma_r=0.08)
         lab = cv2.cvtColor(silk, cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
@@ -165,7 +239,7 @@ def process_face_restoration(input_image, strength=1.0):
 
 # 6. إنشاء الواجهة
 def create_interface():
-    """إنشاء واجهة متوافقة مع Gradio 6.2.0"""
+    """إنشاء واجهة متوافقة مع HuggingFace"""
     
     # CSS مبسط
     custom_css = """
@@ -249,10 +323,6 @@ def create_interface():
         border: 1px solid #e2e8f0 !important;
     }
     
-    .control-group {
-        margin-bottom: 20px !important;
-    }
-    
     .process-btn {
         background: linear-gradient(90deg, var(--primary), var(--secondary)) !important;
         border: none !important;
@@ -296,17 +366,6 @@ def create_interface():
         border-left: 4px solid var(--primary) !important;
     }
     
-    .feature h4 {
-        margin: 0 0 10px 0 !important;
-        color: var(--primary) !important;
-    }
-    
-    .feature p {
-        margin: 0 !important;
-        color: #555 !important;
-        font-size: 0.9em !important;
-    }
-    
     footer {
         text-align: center !important;
         padding: 20px !important;
@@ -314,11 +373,6 @@ def create_interface():
         font-size: 0.9em !important;
         border-top: 1px solid #eee !important;
         margin-top: 30px !important;
-    }
-    
-    .loading {
-        text-align: center !important;
-        padding: 20px !important;
     }
     
     .loading-spinner {
@@ -340,13 +394,14 @@ def create_interface():
     # وظيفة المعالجة مع مؤشر التحميل
     def process_with_progress(image, strength):
         """معالجة الصورة مع تحديث التقدم"""
-        yield None, "🔄 جاري تحميل النموذج...", None
+        if image is None:
+            yield None, "⚠️ الرجاء تحميل صورة أولاً", ""
+            return
         
         try:
-            restorer = FaceRestorer()
-            restorer.load_model()
-            yield None, "✅ النموذج جاهز! جاري معالجة الصورة...", None
+            yield None, "🔄 جاري تحميل النموذج... قد يستغرق هذا دقيقة", ""
             
+            # معالجة الصورة
             result, stats = process_face_restoration(image, strength)
             
             if result is None:
@@ -355,9 +410,9 @@ def create_interface():
                 yield result, "✅ تمت المعالجة بنجاح!", stats
                 
         except Exception as e:
-            logger.error(f"Error: {str(e)}")
-            yield None, f"❌ خطأ: {str(e)}", None
-    
+            error_msg = f"❌ خطأ: {str(e)[:100]}"
+            yield None, error_msg, ""
+
     # بناء الواجهة
     with gr.Blocks(css=custom_css, title="Ultimate Face Fixer") as demo:
         
@@ -367,7 +422,7 @@ def create_interface():
                 <h1>✨ Ultimate Face Fixer</h1>
                 <p>ترميم وتجميل الصور بتقنية الذكاء الاصطناعي المتطورة</p>
                 <div style="margin-top: 10px; font-size: 0.9em;">
-                    <span>الإصدار 3.0 | متوافق مع Gradio 6.2.0</span>
+                    <span>الإصدار 4.0 | متوافق كلياً مع HuggingFace</span>
                 </div>
             </div>
         """)
@@ -382,7 +437,8 @@ def create_interface():
                     gr.Markdown("### 📤 الصورة الأصلية")
                     input_image = gr.Image(
                         label="",
-                        height=320
+                        height=320,
+                        type="numpy"
                     )
                 
                 # الصورة الناتجة
@@ -390,7 +446,8 @@ def create_interface():
                     gr.Markdown("### 📥 الصورة المحسنة")
                     output_image = gr.Image(
                         label="",
-                        height=320
+                        height=320,
+                        type="numpy"
                     )
             
             # عناصر التحكم
@@ -433,34 +490,24 @@ def create_interface():
             # الميزات
             gr.Markdown("### ✨ المميزات الرئيسية")
             with gr.Row(elem_classes="features"):
-                with gr.Column():
-                    gr.HTML("""
-                        <div class="feature">
-                            <h4>🤖 خوارزمية متقدمة</h4>
-                            <p>خوارزمية Ultimate Balance الأصلية محفوظة تماماً</p>
-                        </div>
-                    """)
-                with gr.Column():
-                    gr.HTML("""
-                        <div class="feature">
-                            <h4>⚡ معالجة سريعة</h4>
-                            <p>دعم كامل لـ GPU/CPU مع معالجة فورية</p>
-                        </div>
-                    """)
-                with gr.Column():
-                    gr.HTML("""
-                        <div class="feature">
-                            <h4>🎯 نتائج دقيقة</h4>
-                            <p>ترميم دقيق للملامح مع الحفاظ على التفاصيل</p>
-                        </div>
-                    """)
-                with gr.Column():
-                    gr.HTML("""
-                        <div class="feature">
-                            <h4>📱 واجهة سهلة</h4>
-                            <p>واجهة مستخدم بسيطة وسهلة الاستخدام</p>
-                        </div>
-                    """)
+                gr.HTML("""
+                    <div class="feature">
+                        <h4>🤖 خوارزمية متقدمة</h4>
+                        <p>خوارزمية Ultimate Balance الأصلية محفوظة تماماً</p>
+                    </div>
+                    <div class="feature">
+                        <h4>⚡ معالجة سريعة</h4>
+                        <p>دعم كامل لـ GPU/CPU مع معالجة فورية</p>
+                    </div>
+                    <div class="feature">
+                        <h4>🎯 نتائج دقيقة</h4>
+                        <p>ترميم دقيق للملامح مع الحفاظ على التفاصيل</p>
+                    </div>
+                    <div class="feature">
+                        <h4>📱 واجهة سهلة</h4>
+                        <p>واجهة مستخدم بسيطة وسهلة الاستخدام</p>
+                    </div>
+                """)
             
             # التعليمات
             with gr.Accordion("📖 دليل الاستخدام السريع", open=False):
@@ -489,7 +536,7 @@ def create_interface():
             # التذييل
             gr.HTML("""
                 <footer>
-                    <p>Ultimate Face Fixer v3.0 | تم التطوير باستخدام GFPGAN</p>
+                    <p>Ultimate Face Fixer v4.0 | تم التطوير باستخدام GFPGAN</p>
                     <p style="font-size: 0.8em; color: #888;">
                         ملاحظة: الخوارزمية الأساسية لتحسين الوجه محفوظة تماماً كما هي
                     </p>
@@ -512,26 +559,27 @@ def create_interface():
     
     return demo
 
-# 7. الدالة الرئيسية
+# 7. دالة التشغيل الرئيسية
 def main():
     """الدالة الرئيسية للتشغيل"""
     print("=" * 60)
-    print("Ultimate Face Fixer - الإصدار 3.0")
+    print("Ultimate Face Fixer - الإصدار 4.0")
     print("=" * 60)
     
     # إنشاء الواجهة
     print("🚀 جاري تحميل الواجهة...")
     demo = create_interface()
     
-    # تشغيل الواجهة مع إعدادات HuggingFace
+    # تشغيل الواجهة
     demo.launch(
         server_name="0.0.0.0",
         server_port=7860,
         share=False,
         debug=False,
-        show_error=True
+        show_error=True,
+        server_protocol="http"
     )
 
-# 8. إذا كان الملف يعمل كـ __main__
+# 8. نقطة الدخول الرئيسية
 if __name__ == "__main__":
     main()
