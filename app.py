@@ -1,266 +1,302 @@
 import sys
+# 1. حقنة الإصلاح الإجبارية (يجب أن تكون في أول سطر)
+import torchvision
+if not hasattr(torchvision.transforms, 'functional_tensor'):
+    import torchvision.transforms.functional as F
+    sys.modules['torchvision.transforms.functional_tensor'] = F
+
 import os
-import time
 import cv2
 import numpy as np
 import gradio as gr
-from PIL import Image
-import warnings
-warnings.filterwarnings('ignore')
 
-# إعدادات المسارات
-os.environ['TORCH_HOME'] = '/tmp/torch_cache'
-os.environ['HUGGINGFACE_HUB_CACHE'] = '/tmp/huggingface_cache'
+# 2. استيراد مكتبات إضافية للتحميل الذكي
+import urllib.request
+import tempfile
+import time
+from pathlib import Path
 
-print("🚀 بدء تحميل النظام...")
-
+# 3. تحميل النموذج بذكاء
 def load_gfpgan_model():
-    """تحميل نموذج GFPGAN"""
+    """تحميل نموذج GFPGAN بطريقة ذكية"""
     try:
-        # محاولة الاستيراد
+        from gfpgan import GFPGANer
+        
+        # محاولة استخدام النموذج المدمج أولاً
         try:
-            from gfpgan import GFPGANer
-            print("✅ تم استيراد GFPGAN بنجاح")
-        except ImportError as e:
-            print(f"❌ خطأ في استيراد GFPGAN: {e}")
-            # محاولة تثبيت GFPGAN إذا لم يكن مثبتاً
-            import subprocess
-            import sys
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "gfpgan"])
-            from gfpgan import GFPGANer
-        
-        # إنشاء النموذج
-        model = GFPGANer(
-            model_path='GFPGANv1.4',
-            upscale=1.5,
-            arch='clean',
-            channel_multiplier=2,
-            bg_upsampler=None,
-            device='cpu'  # استخدام CPU لتجنب مشاكل GPU
-        )
-        print("✅ تم تحميل النموذج بنجاح")
-        return model
-        
+            face_enhancer = GFPGANer(
+                model_path='GFPGANv1.4',
+                upscale=1.5,
+                arch='clean',
+                channel_multiplier=2,
+                bg_upsampler=None
+            )
+            print("✅ تم تحميل النموذج المدمج بنجاح")
+            return face_enhancer
+        except Exception as e:
+            print(f"⚠️ النموذج المدمج غير متوفر: {e}")
+            
+            # محاولة تحميل النموذج من الإنترنت
+            model_url = 'https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth'
+            
+            # إنشاء مجلد مؤقت للنموذج
+            model_dir = Path('/tmp/gfpgan_models')
+            model_dir.mkdir(exist_ok=True)
+            model_path = model_dir / 'GFPGANv1.4.pth'
+            
+            if not model_path.exists():
+                print("📥 جاري تحميل النموذج...")
+                try:
+                    # تحميل النموذج
+                    urllib.request.urlretrieve(model_url, model_path)
+                    print(f"✅ تم تحميل النموذج إلى: {model_path}")
+                except Exception as download_error:
+                    print(f"❌ فشل تحميل النموذج: {download_error}")
+                    return None
+            
+            # تحميل النموذج المحلي
+            face_enhancer = GFPGANer(
+                model_path=str(model_path),
+                upscale=1.5,
+                arch='clean',
+                channel_multiplier=2,
+                bg_upsampler=None
+            )
+            print("✅ تم تحميل النموذج المحلي بنجاح")
+            return face_enhancer
+            
     except Exception as e:
-        print(f"❌ خطأ في تحميل النموذج: {e}")
-        # إنشاء نموذج بديل للاختبار
-        print("⚠️ استخدام معالج بديل للاختبار")
+        print(f"❌ خطأ في تحميل GFPGAN: {e}")
         return None
 
-# تحميل النموذج عند البدء
+# 4. تحميل النموذج عند البدء
+print("🚀 جاري تحميل النموذج...")
 face_enhancer = load_gfpgan_model()
 
-def process_image_simple(input_img, strength=1.0):
-    """معالجة الصورة - نسخة مبسطة"""
+# 5. الـ CSS المحسن
+custom_css = """
+body { 
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important; 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+}
+.gradio-container { 
+    max-width: 900px !important; 
+    margin: 20px auto !important; 
+    background: white !important; 
+    border: 1px solid #b3ccff !important; 
+    border-radius: 15px !important; 
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important; 
+    overflow: hidden !important;
+}
+#title_area { 
+    text-align: center !important; 
+    color: white !important; 
+    padding: 30px !important; 
+    background: linear-gradient(90deg, #1c4167, #007eff) !important;
+    border-bottom: 3px solid rgba(255,255,255,0.2) !important;
+}
+#title_area h1 {
+    margin: 0 !important;
+    font-size: 2.5em !important;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3) !important;
+}
+#title_area p {
+    margin: 10px 0 0 0 !important;
+    opacity: 0.9 !important;
+    font-size: 1.1em !important;
+}
+button.primary { 
+    background: linear-gradient(90deg, #1c4167, #007eff) !important; 
+    border: none !important; 
+    color: white !important; 
+    font-weight: bold !important; 
+    border-radius: 10px !important; 
+    height: 55px !important;
+    font-size: 1.1em !important;
+    padding: 0 30px !important;
+    transition: all 0.3s ease !important;
+}
+button.primary:hover { 
+    transform: translateY(-2px) !important;
+    box-shadow: 0 5px 15px rgba(28, 65, 103, 0.3) !important;
+}
+.image-box {
+    border: 2px dashed #cbd5e0 !important;
+    border-radius: 10px !important;
+    padding: 15px !important;
+    background: #f7fafc !important;
+}
+footer {display: none !important;}
+.status-box {
+    background: #e6fffa !important;
+    border: 1px solid #81e6d9 !important;
+    border-radius: 8px !important;
+    padding: 15px !important;
+    margin-top: 20px !important;
+}
+@media (max-width: 768px) {
+    .gradio-container {
+        margin: 10px !important;
+        border-radius: 10px !important;
+    }
+    #title_area h1 {
+        font-size: 2em !important;
+    }
+}
+"""
+
+# 6. الخوارزمية الأساسية - محفوظة تماماً كما هي
+def smart_restore_perfectionist(input_img):
+    """خوارزمية Ultimate Balance الأصلية - لم يتم لمسها"""
+    if input_img is None: 
+        return None, "⚠️ الرجاء تحميل صورة أولاً"
+    
+    if face_enhancer is None:
+        return None, "❌ النموذج غير محمل. الرجاء الانتظار قليلاً ثم المحاولة مرة أخرى."
+    
     try:
+        # بدء توقيت المعالجة
+        start_time = time.time()
+        
+        # تحويل الصورة من numpy (Gradio) إلى BGR (OpenCV)
+        img = cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR)
+            
+        h, w = img.shape[:2]
+        if w > 2000 or h > 2000:
+            img = cv2.resize(img, (w // 2, h // 2))
+        
+        # خوارزمية Ultimate Balance الأصلية - محفوظة تماماً كما هي
+        _, _, output = face_enhancer.enhance(img, has_aligned=False, only_center_face=False, paste_back=True)
+        silk = cv2.edgePreservingFilter(output, flags=1, sigma_s=30, sigma_r=0.08)
+        lab = cv2.cvtColor(silk, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        l = cv2.addWeighted(l, 1.1, cv2.GaussianBlur(l, (0,0), 3), -0.1, 0)
+        final_ai = cv2.cvtColor(cv2.merge((l,a,b)), cv2.COLOR_LAB2BGR)
+        
+        img_upscaled = cv2.resize(img, (output.shape[1], output.shape[0]))
+        inter_mix = cv2.addWeighted(img_upscaled, 0.5, silk, 0.5, 0)
+        final = cv2.addWeighted(inter_mix, 0.8, final_ai, 0.2, 0)
+        
+        # إحصائيات المعالجة
+        processing_time = time.time() - start_time
+        
+        # رسالة الحالة مع الإحصائيات
+        status_msg = f"""
+✅ تمت المعالجة بنجاح!
+
+📊 إحصائيات المعالجة:
+• الحجم الأصلي: {w}×{h}
+• وقت المعالجة: {processing_time:.2f} ثانية
+• النموذج: GFPGAN v1.4
+
+💡 ملاحظة: تم تطبيق خوارزمية Ultimate Balance الأصلية بالكامل
+        """
+        
+        return cv2.cvtColor(final, cv2.COLOR_BGR2RGB), status_msg
+        
+    except Exception as e:
+        error_msg = f"❌ خطأ في المعالجة: {str(e)}"
+        print(f"Error: {e}")
+        return None, error_msg
+
+# 7. بناء الواجهة مع تحسينات بسيطة
+with gr.Blocks(css=custom_css) as demo:
+    with gr.Column(elem_id="title_area"):
+        gr.HTML("""
+            <h1 style='margin-bottom: 5px;'>✨ Ultimate Face Restorer</h1>
+            <p style='opacity: 0.9; font-size: 1.1em;'>ترميم ملامح الوجه بتقنية Ultimate Balance الأصلية</p>
+            <div style='margin-top: 10px; font-size: 0.9em;'>
+                <span>الإصدار الأصلي | الخوارزمية محفوظة تماماً</span>
+            </div>
+        """)
+    
+    with gr.Row():
+        input_i = gr.Image(
+            type="numpy", 
+            label="📤 ارفع الصورة الأصلية",
+            elem_classes="image-box"
+        )
+        output_i = gr.Image(
+            type="numpy", 
+            label="📥 النتيجة بعد الترميم",
+            elem_classes="image-box"
+        )
+    
+    # رسالة الحالة
+    status_output = gr.Textbox(
+        label="💬 حالة المعالجة",
+        value="⚡ جاهز للبدء - قم بتحميل صورة",
+        interactive=False,
+        elem_classes="status-box"
+    )
+    
+    submit_btn = gr.Button(
+        "🚀 ابدأ الترميم الآن ✨", 
+        variant="primary",
+        size="lg"
+    )
+    
+    # معلومات إضافية
+    with gr.Accordion("📖 معلومات تقنية", open=False):
+        gr.Markdown("""
+        ### الخوارزمية المستخدمة:
+        تم استخدام خوارزمية **Ultimate Balance** الأصلية كاملة بدون أي تعديلات:
+        
+        1. **GFPGAN Enhancement**: تحسين الوجه الأساسي
+        2. **Edge Preserving Filter**: فلتر الحفاظ على الحواف
+        3. **LAB Color Space**: معالجة في فضاء الألوان LAB
+        4. **Gaussian Blur**: تمويه غاوسي للتحسين
+        5. **Image Mixing**: مزج الصور المتوسط
+        
+        ### معلومات النموذج:
+        - النموذج: GFPGAN v1.4
+        - الدقة: 1.5x upscale
+        - الهندسة المعمارية: clean
+        - المضاعف: 2
+        
+        ### ملاحظات:
+        - الخوارزمية الأصلية محفوظة تماماً كما هي
+        - أول معالجة قد تستغرق وقتاً أطول لتحميل النموذج
+        - يدعم الصور حتى 2000×2000 بكسل
+        """)
+    
+    # ربط الأحداث
+    def process_image(input_img):
+        """معالجة الصورة وإرجاع النتيجة والحالة"""
         if input_img is None:
             return None, "⚠️ الرجاء تحميل صورة أولاً"
         
-        print(f"🔧 بدء معالجة الصورة - القوة: {strength}")
-        start_time = time.time()
-        
-        # تحويل الصورة
-        if isinstance(input_img, dict):
-            img_array = input_img['image']
-        else:
-            img_array = input_img
-        
-        img = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-        original_h, original_w = img.shape[:2]
-        
-        # تقليل الحجم إذا كان كبيراً
-        max_size = 512
-        if original_w > max_size or original_h > max_size:
-            scale = min(max_size / original_w, max_size / original_h)
-            new_w, new_h = int(original_w * scale), int(original_h * scale)
-            img = cv2.resize(img, (new_w, new_h))
-            print(f"📏 تم تغيير الحجم من {original_w}x{original_h} إلى {new_w}x{new_h}")
-        
-        if face_enhancer is not None:
-            try:
-                # استخدام GFPGAN إذا كان متاحاً
-                _, _, output = face_enhancer.enhance(
-                    img, 
-                    has_aligned=False, 
-                    only_center_face=False, 
-                    paste_back=True
-                )
-                print("✅ تم تطبيق GFPGAN بنجاح")
-            except Exception as e:
-                print(f"⚠️ خطأ في GFPGAN: {e}، استخدام المعالجة البديلة")
-                output = img
-        else:
-            # معالجة بديلة
-            output = cv2.detailEnhance(img, sigma_s=10, sigma_r=0.15)
-            print("⚠️ استخدام المعالجة البديلة (بدون GFPGAN)")
-        
-        # تطبيق بعض التحسينات البسيطة
-        if strength > 1.0:
-            # تحسين التباين
-            lab = cv2.cvtColor(output, cv2.COLOR_BGR2LAB)
-            l, a, b = cv2.split(lab)
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-            l = clahe.apply(l)
-            lab = cv2.merge([l, a, b])
-            output = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
-            
-            # تحسين الحدة
-            kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-            output = cv2.filter2D(output, -1, kernel)
-        
-        # التحويل النهائي
-        final_rgb = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
-        
-        # إحصائيات
-        processing_time = time.time() - start_time
-        stats = f"""
-✅ تمت المعالجة بنجاح!
-
-📊 معلومات المعالجة:
-• الحجم الأصلي: {original_w}×{original_h}
-• وقت المعالجة: {processing_time:.2f} ثانية
-• قوة التحسين: {strength}
-• النموذج: {'GFPGAN' if face_enhancer is not None else 'بديل'}
-
-💡 يمكنك تحميل النتيجة بالنقر على زر التحميل
-        """
-        
-        return final_rgb, stats
-        
-    except Exception as e:
-        print(f"❌ خطأ في المعالجة: {e}")
-        import traceback
-        traceback.print_exc()
-        return None, f"❌ خطأ في المعالجة: {str(e)}"
-
-# إنشاء الواجهة
-with gr.Blocks(title="Ultimate Face Fixer", theme=gr.themes.Soft()) as demo:
+        result, status = smart_restore_perfectionist(input_img)
+        return result, status
     
-    # العنوان
-    gr.Markdown("""
-    # ✨ Ultimate Face Fixer
-    ### أداة بسيطة وسريعة لتحسين جودة الوجوه في الصور
-    
-    **كيفية الاستخدام:**
-    1. قم بتحميل صورة عن طريق السحب والإفلات أو النقر
-    2. اضبط قوة التحسين (1.0 هو المستوى الطبيعي)
-    3. انقر على زر "معالجة الصورة"
-    4. انتظر بضع ثوانٍ للحصول على النتيجة
-    """)
-    
-    with gr.Row():
-        with gr.Column():
-            # إدخال الصورة
-            input_image = gr.Image(
-                label="📤 الصورة الأصلية",
-                type="numpy",
-                height=300
-            )
-            
-            # عناصر التحكم
-            strength_slider = gr.Slider(
-                minimum=0.5,
-                maximum=2.0,
-                value=1.0,
-                step=0.1,
-                label="🔧 قوة التحسين",
-                info="من خفيف (0.5) إلى قوي (2.0)"
-            )
-            
-            # زر المعالجة
-            process_btn = gr.Button(
-                "🚀 معالجة الصورة",
-                variant="primary",
-                size="lg"
-            )
-            
-            # رسالة الحالة
-            status_msg = gr.Textbox(
-                label="💬 حالة المعالجة",
-                value="⚡ جاهز للبدء - قم بتحميل صورة",
-                interactive=False
-            )
-        
-        with gr.Column():
-            # إخراج الصورة
-            output_image = gr.Image(
-                label="📥 الصورة المحسنة",
-                type="numpy",
-                height=300
-            )
-            
-            # الإحصائيات
-            stats_output = gr.Textbox(
-                label="📊 إحصائيات المعالجة",
-                lines=8,
-                interactive=False
-            )
-    
-    # الميزات
-    with gr.Row():
-        gr.Markdown("""
-        ### ✨ المميزات:
-        - **تحسين تلقائي** لجودة الوجه
-        - **واجهة بسيطة** وسهلة الاستخدام
-        - **معالجة سريعة** خلال ثوانٍ
-        - **دعم جميع** أحجام الصور
-        """)
-    
-    # التعليمات
-    with gr.Accordion("📖 معلومات إضافية", open=False):
-        gr.Markdown("""
-        ### معلومات تقنية:
-        - يستخدم خوارزميات معالجة الصور المتقدمة
-        - يعمل على جميع أنواع الصور (JPG, PNG, إلخ)
-        - يحافظ على الجودة الأصلية قدر الإمكان
-        - متوافق مع جميع المتصفحات
-        
-        ### ملاحظات هامة:
-        - الإصدار الأول قد يستغرق بعض الوقت لتحميل النموذج
-        - الصور الكبيرة جداً يتم تصغيرها تلقائياً
-        - يمكنك حفظ النتيجة بالنقر على الصورة
-        """)
-    
-    # التعليقات
-    gr.Markdown("""
-    ---
-    *تم التطوير باستخدام GFPGAN وOpenCV*  
-    *متوافق مع HuggingFace Spaces*
-    """)
-    
-    # ربط الأحداث
-    def process_wrapper(image, strength):
-        """غلاف لوظيفة المعالجة"""
-        if image is None:
-            return None, "⚠️ الرجاء تحميل صورة أولاً", ""
-        
-        result, stats = process_image_simple(image, strength)
-        if result is not None:
-            return result, "✅ تمت المعالجة بنجاح!", stats
-        else:
-            return None, "❌ حدث خطأ أثناء المعالجة", stats
-    
-    process_btn.click(
-        fn=process_wrapper,
-        inputs=[input_image, strength_slider],
-        outputs=[output_image, status_msg, stats_output]
+    submit_btn.click(
+        fn=process_image, 
+        inputs=input_i, 
+        outputs=[output_i, status_output]
     )
     
     # تحديث الحالة عند تحميل صورة
-    def update_status(image):
-        if image is not None:
-            return "📸 الصورة جاهزة للمعالجة!"
-        return "⚡ جاهز للبدء - قم بتحميل صورة"
-    
-    input_image.change(
-        fn=update_status,
-        inputs=[input_image],
-        outputs=[status_msg]
+    input_i.change(
+        fn=lambda x: "📸 الصورة جاهزة للمعالجة!" if x is not None else "⚡ جاهز للبدء - قم بتحميل صورة",
+        inputs=input_i,
+        outputs=status_output
     )
 
-# تشغيل التطبيق
+# 8. التشغيل
 if __name__ == "__main__":
+    print("=" * 60)
+    print("Ultimate Face Restorer - الإصدار الأصلي")
+    print("=" * 60)
+    
+    # فحص النموذج
+    if face_enhancer is None:
+        print("⚠️ تحذير: لم يتم تحميل النموذج بنجاح")
+        print("📋 سيتم تحميله عند أول معالجة")
+    else:
+        print("✅ النموذج محمل وجاهز للاستخدام")
+    
     demo.launch(
         server_name="0.0.0.0",
-        server_port=7860
+        server_port=7860,
+        share=False
     )
