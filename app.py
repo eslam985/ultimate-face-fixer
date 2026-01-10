@@ -338,7 +338,7 @@ def create_downloadable_image(img_array):
         return None
 
 # 10. بناء الواجهة المتطورة
-with gr.Blocks(css=custom_css, title="Ultimate Face Restorer Pro") as demo:
+with gr.Blocks(css=custom_css, title="Ultimate Face Restorer Pro") as demo: 
     
     # المتغيرات لحفظ الحالة
     current_result = gr.State(value=None)
@@ -589,9 +589,4 @@ if __name__ == "__main__":
     print("✅ 5. واجهة مستخدم احترافية")
     print("=" * 70)
     
-    demo.launch(
-        server_name="0.0.0.0",
-        server_port=7860,
-        share=False,
-        debug=False
-    )
+demo.launch(show_api=False, debug=True)
