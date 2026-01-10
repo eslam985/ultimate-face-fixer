@@ -66,7 +66,6 @@ if REALESRGAN_AVAILABLE:
 else:
     bg_upsampler = None
 
-# 5. الـ CSS المحسن مع تصميم احترافي
 custom_css = """
 :root {
     --primary: #1c4167;
@@ -75,39 +74,61 @@ custom_css = """
     --success: #10b981;
     --warning: #f59e0b;
     --dark: #1f2937;
+    --light: #f8fafc;
+    --border: #e2e8f0;
+    --shadow: rgba(0, 0, 0, 0.1);
 }
 
 * {
-    font-family: 'Segoe UI', 'Cairo', system-ui, sans-serif;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
 }
 
 body {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-    margin: 0 !important;
-    padding: 0 !important;
     min-height: 100vh !important;
+    padding: 10px !important;
+    overflow-x: hidden !important;
+    -webkit-tap-highlight-color: transparent !important;
+    -webkit-font-smoothing: antialiased !important;
 }
 
 .gradio-container {
-    max-width: 1200px !important;
-    margin: 20px auto !important;
+    max-width: 1400px !important;
+    margin: 0 auto !important;
     background: white !important;
-    border-radius: 20px !important;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.3) !important;
+    border-radius: 24px !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
     overflow: hidden !important;
     padding: 0 !important;
-    border: 1px solid rgba(255,255,255,0.2) !important;
+    min-height: calc(100vh - 20px) !important;
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
 }
 
+/* تحسينات للأجهزة الصغيرة */
+@media (max-width: 640px) {
+    body {
+        padding: 5px !important;
+    }
+    
+    .gradio-container {
+        border-radius: 20px !important;
+        min-height: calc(100vh - 10px) !important;
+    }
+}
+
+/* الرأس المحسن */
 #title_area {
     text-align: center !important;
-    color: white !important;
-    padding: 40px 20px !important;
-    background: linear-gradient(90deg, var(--primary), var(--secondary)) !important;
-    border-bottom: 3px solid rgba(255,255,255,0.2) !important;
-    margin: 0 !important;
+    padding: clamp(25px, 5vw, 40px) clamp(15px, 3vw, 25px) !important;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%) !important;
     position: relative !important;
     overflow: hidden !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 #title_area::before {
@@ -117,96 +138,196 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M0,0 L100,0 L100,100 Z" fill="rgba(255,255,255,0.05)"/></svg>');
-    background-size: cover;
+    background: 
+        radial-gradient(circle at 20% 80%, rgba(255,255,255,0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(255,255,255,0.05) 0%, transparent 50%);
 }
 
 #title_area h1 {
-    margin: 0 !important;
-    font-size: 2.8em !important;
+    color: white !important;
+    font-size: clamp(1.8rem, 4vw, 2.8rem) !important;
     font-weight: 800 !important;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.3) !important;
-    position: relative !important;
-    z-index: 1 !important;
+    margin: 0 0 8px 0 !important;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    line-height: 1.2 !important;
+    letter-spacing: -0.5px !important;
 }
 
 #title_area p {
-    margin: 10px 0 0 0 !important;
-    opacity: 0.9 !important;
-    font-size: 1.2em !important;
-    position: relative !important;
-    z-index: 1 !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-size: clamp(0.95rem, 2vw, 1.2rem) !important;
+    margin: 0 !important;
+    font-weight: 400 !important;
+    line-height: 1.5 !important;
 }
 
 .version-badge {
     display: inline-block;
-    background: rgba(255,255,255,0.2);
-    padding: 5px 15px;
-    border-radius: 20px;
-    font-size: 0.9em;
-    margin-top: 15px;
+    background: rgba(255, 255, 255, 0.15) !important;
+    color: white !important;
+    padding: 6px 16px !important;
+    border-radius: 20px !important;
+    font-size: clamp(0.75rem, 2vw, 0.9rem) !important;
+    margin-top: 15px !important;
+    backdrop-filter: blur(10px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+/* تخصيص الحاويات العامة */
+.container {
+    padding: clamp(15px, 3vw, 25px) !important;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
 }
 
 /* تخصيص الأزرار */
-button.primary {
-    background: linear-gradient(90deg, var(--primary), var(--secondary)) !important;
+button {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    touch-action: manipulation !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    outline: none !important;
     border: none !important;
+    cursor: pointer !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+button::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 5px;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.5);
+    opacity: 0;
+    border-radius: 100%;
+    transform: scale(1, 1) translate(-50%);
+    transform-origin: 50% 50%;
+}
+
+button:focus:not(:active)::after {
+    animation: ripple 1s ease-out !important;
+}
+
+@keyframes ripple {
+    0% {
+        transform: scale(0, 0);
+        opacity: 0.5;
+    }
+    100% {
+        transform: scale(20, 20);
+        opacity: 0;
+    }
+}
+
+button.primary {
+    background: linear-gradient(135deg, var(--primary), var(--secondary)) !important;
     color: white !important;
-    font-weight: bold !important;
+    font-weight: 700 !important;
+    border-radius: 14px !important;
+    height: clamp(50px, 8vw, 60px) !important;
+    font-size: clamp(1rem, 3vw, 1.2rem) !important;
+    padding: 0 clamp(20px, 4vw, 40px) !important;
+    box-shadow: 0 6px 20px rgba(28, 65, 103, 0.3) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 12px !important;
+    width: 100% !important;
+    min-height: 50px !important;
+}
+
+button.primary:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 12px 25px rgba(28, 65, 103, 0.4) !important;
+}
+
+button.primary:active {
+    transform: translateY(0) !important;
+}
+
+button.secondary {
+    background: linear-gradient(135deg, var(--dark), #374151) !important;
+    color: white !important;
+    font-weight: 600 !important;
     border-radius: 12px !important;
-    height: 60px !important;
-    font-size: 1.2em !important;
-    padding: 0 40px !important;
-    transition: all 0.3s ease !important;
-    box-shadow: 0 4px 15px rgba(28, 65, 103, 0.3) !important;
+    height: clamp(45px, 7vw, 55px) !important;
+    padding: 0 clamp(15px, 3vw, 25px) !important;
+    font-size: clamp(0.9rem, 2.5vw, 1rem) !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     gap: 10px !important;
+    width: 100% !important;
+    min-height: 45px !important;
 }
 
-button.primary:hover {
-    transform: translateY(-3px) !important;
-    box-shadow: 0 8px 25px rgba(28, 65, 103, 0.4) !important;
+/* أزرار الإجراءات */
+.action-buttons {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)) !important;
+    gap: clamp(10px, 2vw, 15px) !important;
+    margin: clamp(15px, 3vw, 25px) 0 !important;
+    width: 100% !important;
 }
 
-button.secondary {
-    background: linear-gradient(90deg, var(--dark), #374151) !important;
-    border: none !important;
-    color: white !important;
-    font-weight: 600 !important;
-    border-radius: 10px !important;
-    height: 50px !important;
-    padding: 0 25px !important;
+@media (max-width: 480px) {
+    .action-buttons {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+.action-button {
+    min-height: clamp(45px, 7vw, 55px) !important;
+    font-size: clamp(0.9rem, 2.5vw, 1rem) !important;
+    padding: 0 clamp(12px, 2vw, 20px) !important;
+}
+
+.download-btn {
+    background: linear-gradient(135deg, var(--success), #34d399) !important;
+}
+
+.share-btn {
+    background: linear-gradient(135deg, #8b5cf6, #a78bfa) !important;
+}
+
+.refine-btn {
+    background: linear-gradient(135deg, var(--warning), #fbbf24) !important;
+}
+
+/* تخصيص الصور والحاويات */
+.image-container {
+    border: 2px dashed var(--border) !important;
+    border-radius: 16px !important;
+    padding: clamp(12px, 2vw, 20px) !important;
+    background: var(--light) !important;
     transition: all 0.3s ease !important;
+    min-height: clamp(300px, 50vw, 400px) !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    gap: 8px !important;
+    width: 100% !important;
+    position: relative !important;
 }
 
-button.secondary:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 5px 15px rgba(31, 41, 55, 0.3) !important;
+.image-container:hover {
+    border-color: var(--secondary) !important;
+    background: #f1f5f9 !important;
 }
 
-/* تخصيص السلايدر */
-.slider-container {
-    background: #f8fafc !important;
-    padding: 25px !important;
-    border-radius: 15px !important;
-    border: 1px solid #e2e8f0 !important;
-    margin: 20px 0 !important;
-}
-
+/* شريط المقارنة - تصميم محسّن للهواتف */
 .compare-container {
     position: relative !important;
     width: 100% !important;
-    height: 500px !important;
-    border-radius: 15px !important;
+    height: clamp(300px, 50vw, 500px) !important;
+    border-radius: 16px !important;
     overflow: hidden !important;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.1) !important;
-    border: 3px solid var(--primary) !important;
+    box-shadow: 0 10px 30px var(--shadow) !important;
+    border: 2px solid var(--primary) !important;
+    margin: clamp(10px, 2vw, 20px) 0 !important;
 }
 
 .compare-slider {
@@ -219,6 +340,7 @@ button.secondary:hover {
     cursor: ew-resize !important;
     z-index: 10 !important;
     transform: translateX(-50%) !important;
+    touch-action: pan-x !important;
 }
 
 .compare-slider::before {
@@ -229,213 +351,341 @@ button.secondary:hover {
     transform: translate(-50%, -50%) !important;
     background: var(--secondary) !important;
     color: white !important;
-    width: 40px !important;
-    height: 40px !important;
+    width: clamp(35px, 8vw, 45px) !important;
+    height: clamp(35px, 8vw, 45px) !important;
     border-radius: 50% !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    font-size: 1.2em !important;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2) !important;
-}
-
-/* تخصيص الكروت */
-.feature-card {
-    background: white !important;
-    border-radius: 15px !important;
-    padding: 25px !important;
-    margin: 15px 0 !important;
-    border: 1px solid #e2e8f0 !important;
-    transition: all 0.3s ease !important;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.05) !important;
-}
-
-.feature-card:hover {
-    transform: translateY(-5px) !important;
-    box-shadow: 0 15px 30px rgba(0,0,0,0.1) !important;
-    border-color: var(--secondary) !important;
-}
-
-/* تخصيص حاوية الصور */
-.image-container {
-    border: 3px dashed #cbd5e0 !important;
-    border-radius: 15px !important;
-    padding: 20px !important;
-    background: #f7fafc !important;
-    transition: all 0.3s ease !important;
-    min-height: 400px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-
-.image-container:hover {
-    border-color: var(--secondary) !important;
-    background: #edf2f7 !important;
-}
-
-/* تخصيص الإحصائيات */
-.stats-box {
-    background: linear-gradient(135deg, #e6fffa, #b2f5ea) !important;
-    border-radius: 15px !important;
-    padding: 25px !important;
-    margin: 20px 0 !important;
-    border: 2px solid #81e6d9 !important;
-    box-shadow: 0 5px 15px rgba(102, 221, 208, 0.2) !important;
+    font-size: clamp(1rem, 3vw, 1.3rem) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    font-weight: bold !important;
 }
 
 /* تخصيص علامات التبويب */
 .tab-nav {
+    background: var(--light) !important;
     border-radius: 12px !important;
-    overflow: hidden !important;
-    background: #f1f5f9 !important;
-    padding: 5px !important;
+    padding: 4px !important;
+    margin: clamp(10px, 2vw, 20px) 0 !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 4px !important;
 }
 
 .tab-nav button {
+    flex: 1 !important;
+    min-width: min(100%, 150px) !important;
+    padding: clamp(10px, 2vw, 14px) clamp(12px, 2vw, 20px) !important;
     border-radius: 8px !important;
-    margin: 0 2px !important;
-    padding: 12px 24px !important;
     font-weight: 600 !important;
-    transition: all 0.3s ease !important;
+    font-size: clamp(0.85rem, 2vw, 0.95rem) !important;
+    background: transparent !important;
+    color: var(--dark) !important;
+    transition: all 0.2s ease !important;
+    white-space: nowrap !important;
 }
 
 .tab-nav button.selected {
-    background: linear-gradient(90deg, var(--primary), var(--secondary)) !important;
-    color: white !important;
-    box-shadow: 0 3px 10px rgba(28, 65, 103, 0.3) !important;
+    background: white !important;
+    color: var(--primary) !important;
+    box-shadow: 0 4px 12px rgba(28, 65, 103, 0.15) !important;
+    border: 1px solid rgba(28, 65, 103, 0.1) !important;
 }
 
-/* تخصيص الفوتر */
-.custom-footer {
-    text-align: center !important;
-    padding: 30px !important;
-    background: var(--dark) !important;
-    color: white !important;
-    margin-top: 40px !important;
-    border-top: 3px solid var(--secondary) !important;
+/* الكروت والمربعات */
+.feature-card {
+    background: white !important;
+    border-radius: 16px !important;
+    padding: clamp(15px, 3vw, 25px) !important;
+    margin: clamp(10px, 2vw, 15px) 0 !important;
+    border: 1px solid var(--border) !important;
+    box-shadow: 0 4px 12px var(--shadow) !important;
+    transition: transform 0.3s ease, box-shadow 0.3s ease !important;
+}
+
+.feature-card:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1) !important;
+}
+
+.stats-box {
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7) !important;
+    border-radius: 16px !important;
+    padding: clamp(15px, 3vw, 25px) !important;
+    margin: clamp(10px, 2vw, 20px) 0 !important;
+    border: 1px solid #bbf7d0 !important;
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.1) !important;
 }
 
 /* تخصيص الـ Checkbox */
 .checkbox-container {
     display: flex !important;
     align-items: center !important;
-    gap: 10px !important;
-    padding: 15px !important;
-    background: #f0f9ff !important;
-    border-radius: 10px !important;
-    border: 2px solid #bae6fd !important;
-    margin: 10px 0 !important;
+    gap: 12px !important;
+    padding: clamp(12px, 2vw, 16px) !important;
+    background: linear-gradient(135deg, #f0f9ff, #e0f2fe) !important;
+    border-radius: 12px !important;
+    border: 1px solid #bae6fd !important;
+    margin: clamp(8px, 1.5vw, 12px) 0 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    user-select: none !important;
 }
 
-/* تخصيص رسائل الحالة */
+.checkbox-container:hover {
+    background: linear-gradient(135deg, #e0f2fe, #bae6fd) !important;
+    transform: translateY(-1px) !important;
+}
+
+.checkbox-container input[type="checkbox"] {
+    width: 20px !important;
+    height: 20px !important;
+    accent-color: var(--primary) !important;
+    cursor: pointer !important;
+}
+
+.checkbox-container label {
+    font-weight: 600 !important;
+    color: var(--dark) !important;
+    font-size: clamp(0.9rem, 2vw, 1rem) !important;
+    flex: 1 !important;
+    cursor: pointer !important;
+}
+
+/* السلايدرات */
+.slider-container {
+    background: var(--light) !important;
+    padding: clamp(15px, 3vw, 25px) !important;
+    border-radius: 16px !important;
+    border: 1px solid var(--border) !important;
+    margin: clamp(10px, 2vw, 20px) 0 !important;
+}
+
+input[type="range"] {
+    width: 100% !important;
+    height: 8px !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    background: linear-gradient(to right, var(--primary), var(--secondary)) !important;
+    border-radius: 4px !important;
+    outline: none !important;
+    margin: 15px 0 !important;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 50% !important;
+    background: white !important;
+    border: 3px solid var(--primary) !important;
+    cursor: pointer !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+    transition: all 0.2s ease !important;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.1) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 50% !important;
+    background: white !important;
+    border: 3px solid var(--primary) !important;
+    cursor: pointer !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* الفوتر */
+.custom-footer {
+    text-align: center !important;
+    padding: clamp(20px, 4vw, 30px) !important;
+    background: var(--dark) !important;
+    color: white !important;
+    margin-top: auto !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+    font-size: clamp(0.8rem, 2vw, 0.9rem) !important;
+}
+
+.custom-footer p {
+    margin: 5px 0 !important;
+    opacity: 0.8 !important;
+    line-height: 1.6 !important;
+}
+
+/* رسائل الحالة */
 .status-success {
-    background: linear-gradient(135deg, #d1fae5, #a7f3d0) !important;
-    border: 2px solid #10b981 !important;
-    color: #065f46 !important;
+    background: linear-gradient(135deg, #dcfce7, #bbf7d0) !important;
+    border: 1px solid #86efac !important;
+    color: #166534 !important;
 }
 
 .status-warning {
     background: linear-gradient(135deg, #fef3c7, #fde68a) !important;
-    border: 2px solid #f59e0b !important;
+    border: 1px solid #fcd34d !important;
     color: #92400e !important;
 }
 
 .status-error {
     background: linear-gradient(135deg, #fee2e2, #fecaca) !important;
-    border: 2px solid #ef4444 !important;
+    border: 1px solid #fca5a5 !important;
     color: #991b1b !important;
 }
 
-/* تخصيص أزرار التنزيل والمشاركة */
-.action-buttons {
-    display: flex !important;
-    gap: 15px !important;
-    margin: 20px 0 !important;
-    flex-wrap: wrap !important;
+/* التبويبات والمحتوى */
+.tab-content {
+    padding: clamp(10px, 2vw, 20px) !important;
+    background: white !important;
+    border-radius: 0 0 16px 16px !important;
 }
 
-.action-button {
-    flex: 1 !important;
-    min-width: 200px !important;
-}
-
-.download-btn {
-    background: linear-gradient(90deg, var(--success), #34d399) !important;
-}
-
-.share-btn {
-    background: linear-gradient(90deg, #8b5cf6, #a78bfa) !important;
-}
-
-.refine-btn {
-    background: linear-gradient(90deg, var(--warning), #fbbf24) !important;
-}
-
-/* تخصيص الـ Accordion */
-.accordion-header {
-    background: #f8fafc !important;
-    border-radius: 10px !important;
-    padding: 20px !important;
-    border: 1px solid #e2e8f0 !important;
+/* تخصيص النصوص */
+label {
     font-weight: 600 !important;
-    font-size: 1.1em !important;
+    color: var(--dark) !important;
+    margin-bottom: 8px !important;
+    display: block !important;
+    font-size: clamp(0.9rem, 2vw, 1rem) !important;
 }
 
-/* تخصيص الـ Progress Bar */
-.progress-bar {
-    height: 10px !important;
-    border-radius: 5px !important;
-    background: linear-gradient(90deg, var(--primary), var(--secondary)) !important;
-}
-
-/* تحسينات للهواتف */
-@media (max-width: 768px) {
-    .gradio-container {
-        margin: 10px !important;
-        border-radius: 15px !important;
-    }
-    
-    #title_area {
-        padding: 25px 15px !important;
-    }
-    
-    #title_area h1 {
-        font-size: 2em !important;
-    }
-    
-    .action-buttons {
-        flex-direction: column !important;
-    }
-    
-    .action-button {
-        min-width: 100% !important;
-    }
-    
-    .compare-container {
-        height: 300px !important;
-    }
+textarea, input[type="text"] {
+    font-size: clamp(0.9rem, 2vw, 1rem) !important;
+    padding: 12px !important;
+    border-radius: 10px !important;
+    border: 1px solid var(--border) !important;
+    background: white !important;
 }
 
 /* تأثيرات خاصة */
 .pulse-animation {
-    animation: pulse 2s infinite;
+    animation: pulse 2s infinite !important;
 }
 
 @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(0, 126, 255, 0.7); }
-    70% { box-shadow: 0 0 0 10px rgba(0, 126, 255, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(0, 126, 255, 0); }
+    0%, 100% { 
+        box-shadow: 0 0 0 0 rgba(0, 126, 255, 0.4) !important;
+    }
+    50% { 
+        box-shadow: 0 0 0 10px rgba(0, 126, 255, 0) !important;
+    }
 }
 
-.shake-animation {
-    animation: shake 0.5s;
+.loading-spinner {
+    width: 40px !important;
+    height: 40px !important;
+    border: 3px solid var(--light) !important;
+    border-top: 3px solid var(--secondary) !important;
+    border-radius: 50% !important;
+    animation: spin 1s linear infinite !important;
 }
 
-@keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-    20%, 40%, 60%, 80% { transform: translateX(5px); }
+@keyframes spin {
+    0% { transform: rotate(0deg) !important; }
+    100% { transform: rotate(360deg) !important; }
+}
+
+/* تحسينات خاصة للهواتف */
+@media (max-width: 768px) {
+    /* تحسين التخطيط للشاشات الصغيرة */
+    .gradio-container .gradio-row {
+        flex-direction: column !important;
+        gap: 15px !important;
+    }
+    
+    /* تحسين المسافات */
+    .container > * {
+        margin-bottom: 15px !important;
+    }
+    
+    /* تحسين حجم الخطوط */
+    h1, h2, h3 {
+        line-height: 1.3 !important;
+    }
+    
+    /* إخفاء بعض العناصر غير الضرورية على الهواتف */
+    .desktop-only {
+        display: none !important;
+    }
+}
+
+@media (max-width: 480px) {
+    /* تحسينات إضافية للهواتف الصغيرة */
+    .image-container {
+        min-height: 250px !important;
+    }
+    
+    .compare-container {
+        height: 250px !important;
+    }
+    
+    button.primary, button.secondary {
+        min-height: 45px !important;
+        font-size: 0.95rem !important;
+    }
+    
+    /* تحسين المسافات الداخلية */
+    .container {
+        padding: 12px !important;
+    }
+}
+
+/* دعم اللمس للأجهزة التي تدعم hover */
+@media (hover: none) and (pointer: coarse) {
+    button.primary:hover, 
+    button.secondary:hover,
+    .feature-card:hover {
+        transform: none !important;
+    }
+    
+    .checkbox-container:hover {
+        transform: none !important;
+        background: linear-gradient(135deg, #f0f9ff, #e0f2fe) !important;
+    }
+    
+    .image-container:hover {
+        background: var(--light) !important;
+        border-color: var(--border) !important;
+    }
+}
+
+/* تحسين الوصول accessibility */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* دعم الوضع الداكن */
+@media (prefers-color-scheme: dark) {
+    .gradio-container {
+        background: #1a1a1a !important;
+    }
+    
+    .feature-card, 
+    .stats-box,
+    .slider-container,
+    .checkbox-container {
+        background: #2d2d2d !important;
+        border-color: #404040 !important;
+    }
+    
+    label {
+        color: #e5e5e5 !important;
+    }
+}
+
+/* تحسينات لشاشات كبيرة جداً */
+@media (min-width: 1920px) {
+    .gradio-container {
+        max-width: 1600px !important;
+    }
 }
 """
 
